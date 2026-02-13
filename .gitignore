@@ -1,0 +1,13 @@
+# Build outputs
+build/
+
+# Zarf packages
+*.tar.zst
+
+# Generated dist artifacts
+.dist/
+.dist-*/
+example/.dist/
+
+# OS files
+.DS_Store
