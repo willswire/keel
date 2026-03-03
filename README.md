@@ -52,7 +52,7 @@ Compose mode (`--compose-file`) maps each compose service into a UDS/Zarf compon
 - `services.*.entrypoint` / `services.*.command` -> container command/args
 - `services.*.healthcheck.test` -> liveness probe command
 - `services.*.volumes` + top-level `volumes` -> PVC mounts and bind-mounted config files/directories (ConfigMap when possible)
-- `services.*.secrets` + top-level `secrets` -> Kubernetes Secret mounts and generated Secret manifests
+- `services.*.secrets` + top-level `secrets` -> Kubernetes Secret mounts and generated Secret manifests with `###ZARF_VAR_*###` placeholders (plus generated `variables` entries in `zarf.yaml`)
 - `services.*.depends_on` -> init-container wait logic for known dependent service ports
 - `services.*.deploy.resources` -> container resources requests/limits
 - `services.*.profiles` -> profile-based service selection (activate with `--compose-profile`)
