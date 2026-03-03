@@ -163,6 +163,30 @@ func TestParseFileProfiles(t *testing.T) {
 	}
 }
 
+func TestParseFileDefaultProjectNameFromFileName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "wordpress-mysql.compose.yml")
+	content := `services:
+  app:
+    image: nginx:1.27
+    ports:
+      - "8080:8080"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write compose file: %v", err)
+	}
+
+	spec, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+	if spec.Name != "wordpress-mysql" {
+		t.Fatalf("expected project name from file name, got %q", spec.Name)
+	}
+}
+
 func TestParseFileEnvFileAndEnvironmentOverride(t *testing.T) {
 	t.Parallel()
 
