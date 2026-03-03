@@ -308,7 +308,7 @@ func ParseFileWithOptions(path string, opts ParseOptions) (model.ComposeAppSpec,
 
 	projectName := strings.TrimSpace(file.Name)
 	if projectName == "" {
-		projectName = filepath.Base(composeDir)
+		projectName = defaultProjectNameFromComposePath(composeAbs)
 	}
 	projectName, err = normalizeName(projectName)
 	if err != nil {
@@ -1443,4 +1443,11 @@ func normalizeName(name string) (string, error) {
 		return "", fmt.Errorf("name must contain at least one alphanumeric character")
 	}
 	return out, nil
+}
+
+func defaultProjectNameFromComposePath(path string) string {
+	base := filepath.Base(strings.TrimSpace(path))
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	base = strings.TrimSuffix(base, ".compose")
+	return base
 }
