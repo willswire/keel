@@ -28,7 +28,7 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 		Name:            "demo-stack",
 		Namespace:       "demo-stack",
 		Version:         "0.2.0",
-		ComposeFilePath: "/workspace/examples/docker-compose.yml",
+		ComposeFilePath: "/workspace/examples/compose.yaml",
 		Volumes: map[string]model.ComposeVolumeSpec{
 			"app-data": {Name: "app-data"},
 		},
@@ -41,10 +41,10 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 				Namespace: "demo-stack",
 				Image:     "keel.local/api:latest",
 				Build: &model.ComposeBuildSpec{
-					ContextPath:    "/workspace/examples",
-					DockerfilePath: "/workspace/examples/Dockerfile",
+					ContextPath:       "/workspace/examples",
+					ContainerfilePath: "/workspace/examples/Containerfile",
 				},
-				Dockerfile: model.DockerfileSpec{
+				Container: model.ContainerSpec{
 					ExposedPorts: []model.Port{{Number: 8080, Protocol: "TCP"}},
 					Env:          []model.EnvVar{{Name: "MESSAGE", Value: "hello"}},
 					User:         "10001",
@@ -70,7 +70,7 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 				Name:      "redis",
 				Namespace: "demo-stack",
 				Image:     "redis:7-alpine",
-				Dockerfile: model.DockerfileSpec{
+				Container: model.ContainerSpec{
 					ExposedPorts: []model.Port{{Number: 6379, Protocol: "TCP"}},
 				},
 			},

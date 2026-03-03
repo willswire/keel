@@ -1,4 +1,4 @@
-package dockerfile
+package containerfile
 
 import (
 	"os"
@@ -9,7 +9,7 @@ import (
 func TestParseFileFinalStage(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "Dockerfile")
+	path := filepath.Join(dir, "Containerfile")
 	content := `FROM busybox:1.0 AS builder
 EXPOSE 1234
 USER 1000
@@ -24,7 +24,7 @@ USER 2000:2000
 CMD ["nginx", "-g", "daemon off;"]
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	spec, err := ParseFile(path)
@@ -58,13 +58,13 @@ CMD ["nginx", "-g", "daemon off;"]
 func TestParseFileMissingExpose(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "Dockerfile")
+	path := filepath.Join(dir, "Containerfile")
 	content := `FROM alpine
 LABEL NAME=example
 USER 1000
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	if _, err := ParseFile(path); err == nil {
@@ -75,13 +75,13 @@ USER 1000
 func TestParseFileMissingUser(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "Dockerfile")
+	path := filepath.Join(dir, "Containerfile")
 	content := `FROM alpine
 LABEL NAME=example
 EXPOSE 8080
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	if _, err := ParseFile(path); err == nil {
@@ -92,13 +92,13 @@ EXPOSE 8080
 func TestParseFileMissingNameLabel(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "Dockerfile")
+	path := filepath.Join(dir, "Containerfile")
 	content := `FROM alpine
 EXPOSE 8080
 USER 1000
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	if _, err := ParseFile(path); err == nil {

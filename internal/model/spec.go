@@ -18,7 +18,7 @@ type EnvVar struct {
 	Value string
 }
 
-type DockerfileSpec struct {
+type ContainerSpec struct {
 	ExposedPorts []Port
 	Env          []EnvVar
 	Name         string
@@ -29,19 +29,19 @@ type DockerfileSpec struct {
 }
 
 type AppSpec struct {
-	Name           string
-	Namespace      string
-	Image          string
-	Version        string
-	DockerfilePath string
-	ContextPath    string
-	Platforms      []string
-	Dockerfile     DockerfileSpec
+	Name              string
+	Namespace         string
+	Image             string
+	Version           string
+	ContainerfilePath string
+	ContextPath       string
+	Platforms         []string
+	Container         ContainerSpec
 }
 
 type ComposeBuildSpec struct {
-	ContextPath    string
-	DockerfilePath string
+	ContextPath       string
+	ContainerfilePath string
 }
 
 type ComposeVolumeSpec struct {
@@ -86,16 +86,16 @@ type ComposeResourcesSpec struct {
 }
 
 type ComposeServiceSpec struct {
-	Name       string
-	Namespace  string
-	Image      string
-	Dockerfile DockerfileSpec
-	Build      *ComposeBuildSpec
-	Volumes    []ComposeVolumeMount
-	Secrets    []ComposeServiceSecretSpec
-	DependsOn  []ComposeDependencySpec
-	Resources  ComposeResourcesSpec
-	Profiles   []string
+	Name      string
+	Namespace string
+	Image     string
+	Container ContainerSpec
+	Build     *ComposeBuildSpec
+	Volumes   []ComposeVolumeMount
+	Secrets   []ComposeServiceSecretSpec
+	DependsOn []ComposeDependencySpec
+	Resources ComposeResourcesSpec
+	Profiles  []string
 }
 
 type ComposeAppSpec struct {
@@ -127,15 +127,15 @@ func NewDistSpec(output string) DistSpec {
 }
 
 func (a AppSpec) PrimaryPort() (Port, error) {
-	if len(a.Dockerfile.ExposedPorts) == 0 {
+	if len(a.Container.ExposedPorts) == 0 {
 		return Port{}, fmt.Errorf("no EXPOSE instruction found in container build file")
 	}
-	return a.Dockerfile.ExposedPorts[0], nil
+	return a.Container.ExposedPorts[0], nil
 }
 
 func (s ComposeServiceSpec) PrimaryPort() (Port, error) {
-	if len(s.Dockerfile.ExposedPorts) == 0 {
+	if len(s.Container.ExposedPorts) == 0 {
 		return Port{}, fmt.Errorf("no EXPOSE or ports entry found for service %q", s.Name)
 	}
-	return s.Dockerfile.ExposedPorts[0], nil
+	return s.Container.ExposedPorts[0], nil
 }

@@ -13,7 +13,7 @@ import (
 
 	build "github.com/willswire/keel/internal/buildkit"
 	"github.com/willswire/keel/internal/compose"
-	"github.com/willswire/keel/internal/dockerfile"
+	"github.com/willswire/keel/internal/containerfile"
 	"github.com/willswire/keel/internal/model"
 	"github.com/willswire/keel/internal/render"
 	"github.com/willswire/keel/internal/validate"
@@ -93,7 +93,7 @@ func runGenContainerfile(ctx context.Context, opts genOptions, outputPath string
 	l := zlogger.From(ctx)
 	l.Info("rendering dist artifacts", "source", "containerfile", "output", outputPath, "containerfile", containerfilePath, "context", contextPath)
 
-	containerSpec, err := dockerfile.ParseFile(containerfilePath)
+	containerSpec, err := containerfile.ParseFile(containerfilePath)
 	if err != nil {
 		return err
 	}
@@ -106,14 +106,14 @@ func runGenContainerfile(ctx context.Context, opts genOptions, outputPath string
 	namespace := appName
 
 	app := model.AppSpec{
-		Name:           appName,
-		Namespace:      namespace,
-		Image:          imageRef,
-		Version:        opts.Version,
-		DockerfilePath: containerfilePath,
-		ContextPath:    contextPath,
-		Platforms:      defaultPlatforms,
-		Dockerfile:     containerSpec,
+		Name:              appName,
+		Namespace:         namespace,
+		Image:             imageRef,
+		Version:           opts.Version,
+		ContainerfilePath: containerfilePath,
+		ContextPath:       contextPath,
+		Platforms:         defaultPlatforms,
+		Container:         containerSpec,
 	}
 	dist := model.NewDistSpec(outputPath)
 
@@ -128,7 +128,7 @@ func runGenContainerfile(ctx context.Context, opts genOptions, outputPath string
 	if !opts.SkipImageBuild {
 		l.Info("building image archive", "image", imageRef, "platforms", strings.Join(defaultPlatforms, ","))
 		if err := build.ImageArchive(ctx, build.Options{
-			Dockerfile:    containerfilePath,
+			Containerfile: containerfilePath,
 			Context:       contextPath,
 			Image:         imageRef,
 			Platforms:     defaultPlatforms,
@@ -182,7 +182,7 @@ func runGenCompose(ctx context.Context, opts genOptions, outputPath string, comp
 			outputArchive := filepath.Join(dist.RootPath, "images", fmt.Sprintf("%s.tar", svc.Name))
 			l.Info("building image archive", "service", svc.Name, "image", svc.Image, "platforms", strings.Join(defaultPlatforms, ","))
 			if err := build.ImageArchive(ctx, build.Options{
-				Dockerfile:    svc.Build.DockerfilePath,
+				Containerfile: svc.Build.ContainerfilePath,
 				Context:       svc.Build.ContextPath,
 				Image:         svc.Image,
 				Platforms:     defaultPlatforms,

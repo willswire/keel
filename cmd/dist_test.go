@@ -21,9 +21,9 @@ func TestResolveComposePathFlagRelativeToInputFileDirectory(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	inputFile := filepath.Join(dir, "Dockerfile")
+	inputFile := filepath.Join(dir, "Containerfile")
 	if err := os.WriteFile(inputFile, []byte("FROM busybox\n"), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	c := newTestGenCommand()
@@ -42,42 +42,15 @@ func TestResolveComposePathDefaultUsesCanonicalName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	inputFile := filepath.Join(dir, "Dockerfile")
+	inputFile := filepath.Join(dir, "Containerfile")
 	if err := os.WriteFile(inputFile, []byte("FROM busybox\n"), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+		t.Fatalf("write Containerfile: %v", err)
 	}
 
 	path := resolveComposePath(newTestGenCommand(), genOptions{}, inputFile)
 	want := filepath.Join(dir, "compose.yaml")
 	if path != want {
 		t.Fatalf("unexpected compose path: got=%q want=%q", path, want)
-	}
-}
-
-func TestResolveInputSourceFileDockerfile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	inputFile := filepath.Join(dir, "Dockerfile")
-	if err := os.WriteFile(inputFile, []byte("FROM busybox\n"), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
-	}
-
-	source, dockerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
-	if err != nil {
-		t.Fatalf("resolveInputSource() error = %v", err)
-	}
-	if source != sourceContainerfile {
-		t.Fatalf("expected containerfile source, got %q", source)
-	}
-	if dockerfilePath != inputFile {
-		t.Fatalf("unexpected containerfile path: got=%q want=%q", dockerfilePath, inputFile)
-	}
-	if contextPath != dir {
-		t.Fatalf("unexpected context path: got=%q want=%q", contextPath, dir)
-	}
-	if composePath != "" {
-		t.Fatalf("did not expect compose path, got %q", composePath)
 	}
 }
 
@@ -90,15 +63,42 @@ func TestResolveInputSourceFileContainerfile(t *testing.T) {
 		t.Fatalf("write Containerfile: %v", err)
 	}
 
-	source, dockerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
+	source, detectedContainerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
 	if err != nil {
 		t.Fatalf("resolveInputSource() error = %v", err)
 	}
 	if source != sourceContainerfile {
 		t.Fatalf("expected containerfile source, got %q", source)
 	}
-	if dockerfilePath != inputFile {
-		t.Fatalf("unexpected containerfile path: got=%q want=%q", dockerfilePath, inputFile)
+	if detectedContainerfilePath != inputFile {
+		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedContainerfilePath, inputFile)
+	}
+	if contextPath != dir {
+		t.Fatalf("unexpected context path: got=%q want=%q", contextPath, dir)
+	}
+	if composePath != "" {
+		t.Fatalf("did not expect compose path, got %q", composePath)
+	}
+}
+
+func TestResolveInputSourceFileDockerfileCompatibility(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputFile := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(inputFile, []byte("FROM busybox\n"), 0o644); err != nil {
+		t.Fatalf("write Dockerfile: %v", err)
+	}
+
+	source, detectedContainerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
+	if err != nil {
+		t.Fatalf("resolveInputSource() error = %v", err)
+	}
+	if source != sourceContainerfile {
+		t.Fatalf("expected containerfile source, got %q", source)
+	}
+	if detectedContainerfilePath != inputFile {
+		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedContainerfilePath, inputFile)
 	}
 	if contextPath != dir {
 		t.Fatalf("unexpected context path: got=%q want=%q", contextPath, dir)
@@ -117,7 +117,7 @@ func TestResolveInputSourceFileCompose(t *testing.T) {
 		t.Fatalf("write compose file: %v", err)
 	}
 
-	source, dockerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
+	source, detectedContainerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, inputFile)
 	if err != nil {
 		t.Fatalf("resolveInputSource() error = %v", err)
 	}
@@ -127,8 +127,8 @@ func TestResolveInputSourceFileCompose(t *testing.T) {
 	if composePath != inputFile {
 		t.Fatalf("unexpected compose path: got=%q want=%q", composePath, inputFile)
 	}
-	if dockerfilePath != "" || contextPath != "" {
-		t.Fatalf("did not expect containerfile/context paths: containerfile=%q context=%q", dockerfilePath, contextPath)
+	if detectedContainerfilePath != "" || contextPath != "" {
+		t.Fatalf("did not expect containerfile/context paths: containerfile=%q context=%q", detectedContainerfilePath, contextPath)
 	}
 }
 
@@ -162,15 +162,15 @@ func TestResolveInputSourceDirectoryContainerfileOnly(t *testing.T) {
 		t.Fatalf("write Containerfile: %v", err)
 	}
 
-	source, detectedDockerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
+	source, detectedContainerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
 	if err != nil {
 		t.Fatalf("resolveInputSource() error = %v", err)
 	}
 	if source != sourceContainerfile {
 		t.Fatalf("expected containerfile source, got %q", source)
 	}
-	if detectedDockerfilePath != containerfilePath {
-		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedDockerfilePath, containerfilePath)
+	if detectedContainerfilePath != containerfilePath {
+		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedContainerfilePath, containerfilePath)
 	}
 	if contextPath != dir {
 		t.Fatalf("unexpected context path: got=%q want=%q", contextPath, dir)
@@ -180,7 +180,7 @@ func TestResolveInputSourceDirectoryContainerfileOnly(t *testing.T) {
 	}
 }
 
-func TestResolveInputSourceDirectoryDockerOnly(t *testing.T) {
+func TestResolveInputSourceDirectoryDockerfileOnlyCompatibility(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -189,15 +189,15 @@ func TestResolveInputSourceDirectoryDockerOnly(t *testing.T) {
 		t.Fatalf("write Dockerfile: %v", err)
 	}
 
-	source, detectedDockerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
+	source, detectedContainerfilePath, contextPath, composePath, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
 	if err != nil {
 		t.Fatalf("resolveInputSource() error = %v", err)
 	}
 	if source != sourceContainerfile {
 		t.Fatalf("expected containerfile source, got %q", source)
 	}
-	if detectedDockerfilePath != dockerfilePath {
-		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedDockerfilePath, dockerfilePath)
+	if detectedContainerfilePath != dockerfilePath {
+		t.Fatalf("unexpected containerfile path: got=%q want=%q", detectedContainerfilePath, dockerfilePath)
 	}
 	if contextPath != dir {
 		t.Fatalf("unexpected context path: got=%q want=%q", contextPath, dir)
@@ -207,15 +207,15 @@ func TestResolveInputSourceDirectoryDockerOnly(t *testing.T) {
 	}
 }
 
-func TestResolveInputSourceDirectoryDockerAndContainerfileAmbiguous(t *testing.T) {
+func TestResolveInputSourceDirectoryDockerfileAndContainerfileAmbiguous(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
-	}
 	if err := os.WriteFile(filepath.Join(dir, "Containerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
 		t.Fatalf("write Containerfile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
+		t.Fatalf("write Dockerfile: %v", err)
 	}
 
 	_, _, _, _, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
@@ -231,8 +231,8 @@ func TestResolveInputSourceDirectoryAmbiguous(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
-		t.Fatalf("write Dockerfile: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "Containerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
+		t.Fatalf("write Containerfile: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte("services:\n  app:\n    image: nginx\n"), 0o644); err != nil {
 		t.Fatalf("write compose file: %v", err)
@@ -240,7 +240,7 @@ func TestResolveInputSourceDirectoryAmbiguous(t *testing.T) {
 
 	_, _, _, _, err := resolveInputSource(newTestGenCommand(), genOptions{}, dir)
 	if err == nil {
-		t.Fatal("expected ambiguity error when both Dockerfile and compose file exist")
+		t.Fatal("expected ambiguity error when both Containerfile and compose file exist")
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
 		t.Fatalf("expected ambiguity error message, got: %v", err)

@@ -64,7 +64,7 @@ Keel tolerates compose extensions and dev-only keys without failing generation:
 - `services.*.develop` keys (ignored during manifest generation)
 
 `keel gen` auto-detects source type from the input path (Containerfile path or compose YAML path).
-When scanning a directory, Keel prefers canonical compose filenames (`compose.yaml`, `compose.yml`) before legacy names (`docker-compose.yaml`, `docker-compose.yml`).
+When scanning a directory, Keel prefers canonical compose filenames (`compose.yaml`, `compose.yml`) before vendored names (`docker-compose.yaml`, `docker-compose.yml`).
 If a directory contains both a build file and a compose file, Keel errors as ambiguous and asks you to use `--containerfile` or `--compose-file`.
 If a directory contains both `Dockerfile` and `Containerfile`, Keel errors as ambiguous and asks you to use `--containerfile`.
 
