@@ -133,7 +133,7 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	}
 	for _, want := range []string{
 		"variables:",
-		"name: COMPOSE_SECRET_DB_PASSWORD",
+		"name: DB_PASSWORD",
 		"sensitive: true",
 		"prompt: true",
 	} {
@@ -190,7 +190,7 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	if strings.Contains(string(secretManifest), "super-secret") {
 		t.Fatalf("expected secret manifest to avoid raw secret values")
 	}
-	if !strings.Contains(string(secretManifest), "###ZARF_VAR_COMPOSE_SECRET_DB_PASSWORD###") {
+	if !strings.Contains(string(secretManifest), "###ZARF_VAR_DB_PASSWORD###") {
 		t.Fatalf("expected secret manifest to contain templated zarf variable value")
 	}
 }
