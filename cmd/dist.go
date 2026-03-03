@@ -32,6 +32,7 @@ const (
 type genOptions struct {
 	Dockerfile         string
 	ComposeFile        string
+	ComposeProfiles    []string
 	Context            string
 	Version            string
 	Output             string
@@ -59,6 +60,7 @@ func newGenCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&opts.Dockerfile, "dockerfile", "./Dockerfile", "Path to Dockerfile")
 	cmd.Flags().StringVar(&opts.ComposeFile, "compose-file", "", "Path to docker-compose.yml file")
+	cmd.Flags().StringArrayVar(&opts.ComposeProfiles, "compose-profile", nil, "Compose profile to include (repeatable)")
 	cmd.Flags().StringVar(&opts.Context, "context", ".", "Docker build context")
 	cmd.Flags().StringVar(&opts.Version, "version", model.DefaultVersion, "Package version written to zarf.yaml")
 	cmd.Flags().StringVar(&opts.Output, "output", ".dist", "Output directory")
@@ -154,7 +156,9 @@ func runGenCompose(ctx context.Context, opts genOptions, outputPath string, comp
 	l := zlogger.From(ctx)
 	l.Info("rendering dist artifacts", "source", "compose", "output", outputPath, "compose_file", composePath)
 
-	composeSpec, err := compose.ParseFile(composePath)
+	composeSpec, err := compose.ParseFileWithOptions(composePath, compose.ParseOptions{
+		Profiles: opts.ComposeProfiles,
+	})
 	if err != nil {
 		return err
 	}

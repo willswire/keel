@@ -47,10 +47,21 @@ Compose mode (`--compose-file`) maps each compose service into a UDS/Zarf compon
 - `services.*.build` -> image archive build input (`context`, `dockerfile`)
 - `services.*.image` -> component image reference (used directly when `build` is not set)
 - `services.*.ports` / `services.*.expose` -> service/deployment ports + UDS exposed port
-- `services.*.environment` -> container environment variables
+- `services.*.env_file` + `services.*.environment` -> merged container env (inline env overrides env_file)
 - `services.*.user` -> pod `runAsUser` / `runAsNonRoot` behavior
 - `services.*.entrypoint` / `services.*.command` -> container command/args
 - `services.*.healthcheck.test` -> liveness probe command
+- `services.*.volumes` + top-level `volumes` -> PVC mounts and bind-mounted config files/directories (ConfigMap when possible)
+- `services.*.secrets` + top-level `secrets` -> Kubernetes Secret mounts and generated Secret manifests
+- `services.*.depends_on` -> init-container wait logic for known dependent service ports
+- `services.*.deploy.resources` -> container resources requests/limits
+- `services.*.profiles` -> profile-based service selection (activate with `--compose-profile`)
+- top-level `include` -> local compose-file include merge
+
+Keel tolerates compose extensions and dev-only keys without failing generation:
+
+- top-level/service `x-*` extension blocks (including YAML anchors/aliases/merge keys)
+- `services.*.develop` keys (ignored during manifest generation)
 
 `keel gen` auto-detects source type from the input path (Dockerfile file path or compose YAML file path).
 If a directory contains both a Dockerfile and a compose file, Keel errors as ambiguous and asks you to use `--dockerfile` or `--compose-file`.
@@ -59,6 +70,7 @@ If a directory contains both a Dockerfile and a compose file, Keel errors as amb
 
 - Dockerfile mode builds use `docker buildx build` and output an OCI archive at `.dist/images/app.tar`.
 - Compose mode builds one OCI archive per service that defines `build`, under `.dist/images/<service>.tar`.
+- If all compose services are profile-gated, use `--compose-profile <name>` (repeatable) to select services.
 - Docker + buildx is required (`docker buildx version`).
 - `keel gen` always validates generated artifacts and overwrites `./.dist` by default.
 - Build logs are quiet by default; use `--verbose` (or `--log-level debug`) for full build output.
