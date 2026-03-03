@@ -12,16 +12,16 @@ import (
 	"github.com/willswire/keel/internal/model"
 )
 
-// ParseFile parses a Dockerfile into a normalized spec for the final build stage.
+// ParseFile parses a container build file into a normalized spec for the final build stage.
 func ParseFile(path string) (model.DockerfileSpec, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return model.DockerfileSpec{}, fmt.Errorf("read Dockerfile %s: %w", path, err)
+		return model.DockerfileSpec{}, fmt.Errorf("read container build file %s: %w", path, err)
 	}
 
 	lines := flattenLines(string(content))
 	if len(lines) == 0 {
-		return model.DockerfileSpec{}, fmt.Errorf("Dockerfile %s is empty", filepath.Clean(path))
+		return model.DockerfileSpec{}, fmt.Errorf("container build file %s is empty", filepath.Clean(path))
 	}
 
 	stage := model.DockerfileSpec{}
@@ -80,20 +80,20 @@ func ParseFile(path string) (model.DockerfileSpec, error) {
 	}
 
 	if !haveFrom {
-		return model.DockerfileSpec{}, fmt.Errorf("Dockerfile must contain FROM")
+		return model.DockerfileSpec{}, fmt.Errorf("container build file must contain FROM")
 	}
 
 	stage.ExposedPorts = dedupeAndSortPorts(stage.ExposedPorts)
 	stage.Env = dedupeEnv(stage.Env)
 
 	if len(stage.ExposedPorts) == 0 {
-		return model.DockerfileSpec{}, fmt.Errorf("Dockerfile is missing required EXPOSE instruction in final stage")
+		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required EXPOSE instruction in final stage")
 	}
 	if strings.TrimSpace(stage.Name) == "" {
-		return model.DockerfileSpec{}, fmt.Errorf("Dockerfile is missing required LABEL NAME instruction in final stage")
+		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required LABEL NAME instruction in final stage")
 	}
 	if strings.TrimSpace(stage.User) == "" {
-		return model.DockerfileSpec{}, fmt.Errorf("Dockerfile is missing required USER instruction in final stage")
+		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required USER instruction in final stage")
 	}
 
 	return stage, nil
