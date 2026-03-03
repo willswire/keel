@@ -109,6 +109,43 @@ func TestParseFileMissingImageAndBuild(t *testing.T) {
 	}
 }
 
+func TestParseFileBuildDefaultsToContainerfileWhenDockerfileMissing(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Containerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
+		t.Fatalf("write Containerfile: %v", err)
+	}
+
+	path := filepath.Join(dir, "compose.yaml")
+	content := `services:
+  app:
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write compose file: %v", err)
+	}
+
+	spec, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+
+	app, ok := serviceByName(spec.Services, "app")
+	if !ok {
+		t.Fatalf("expected app service")
+	}
+	if app.Build == nil {
+		t.Fatalf("expected build spec for app service")
+	}
+	if got, want := app.Build.DockerfilePath, filepath.Join(dir, "Containerfile"); got != want {
+		t.Fatalf("unexpected build file path: got=%q want=%q", got, want)
+	}
+}
+
 func TestParseExampleComposeFile(t *testing.T) {
 	t.Parallel()
 

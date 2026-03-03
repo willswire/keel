@@ -20,17 +20,18 @@ import (
 )
 
 var defaultPlatforms = []string{"linux/amd64", "linux/arm64"}
-var composeDefaultFilenames = []string{"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
+var composeDefaultFilenames = []string{"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
+var buildFileDefaultFilenames = []string{"Containerfile", "Dockerfile"}
 
 type genSource string
 
 const (
-	sourceDockerfile genSource = "dockerfile"
-	sourceCompose    genSource = "compose"
+	sourceContainerfile genSource = "containerfile"
+	sourceCompose       genSource = "compose"
 )
 
 type genOptions struct {
-	Dockerfile         string
+	Containerfile      string
 	ComposeFile        string
 	ComposeProfiles    []string
 	Context            string
@@ -47,7 +48,7 @@ func newGenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "gen [PATH]",
 		Aliases: []string{"dist"},
-		Short:   "Generate a .dist package layout from Dockerfile or Docker Compose",
+		Short:   "Generate a .dist package layout from Containerfile or Compose",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputPath := "."
@@ -58,21 +59,21 @@ func newGenCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.Dockerfile, "dockerfile", "./Dockerfile", "Path to Dockerfile")
-	cmd.Flags().StringVar(&opts.ComposeFile, "compose-file", "", "Path to docker-compose.yml file")
+	cmd.Flags().StringVar(&opts.Containerfile, "containerfile", "./Containerfile", "Path to Containerfile")
+	cmd.Flags().StringVar(&opts.ComposeFile, "compose-file", "", "Path to compose.yaml")
 	cmd.Flags().StringArrayVar(&opts.ComposeProfiles, "compose-profile", nil, "Compose profile to include (repeatable)")
-	cmd.Flags().StringVar(&opts.Context, "context", ".", "Docker build context")
+	cmd.Flags().StringVar(&opts.Context, "context", ".", "Container build context")
 	cmd.Flags().StringVar(&opts.Version, "version", model.DefaultVersion, "Package version written to zarf.yaml")
 	cmd.Flags().StringVar(&opts.Output, "output", ".dist", "Output directory")
 	cmd.Flags().StringVar(&opts.ZarfMinVersion, "zarf-min-version", "v0.67.0", "Documented minimum Zarf version for image archive support")
-	cmd.Flags().BoolVar(&opts.SkipImageBuild, "skip-image-build", false, "Skip docker buildx image archive build")
+	cmd.Flags().BoolVar(&opts.SkipImageBuild, "skip-image-build", false, "Skip image archive build")
 	cmd.Flags().BoolVar(&opts.SkipZarfValidation, "skip-zarf-validation", false, "Skip Zarf Go-package validation pass")
 
 	return cmd
 }
 
 func runGen(ctx context.Context, cmd *cobra.Command, opts genOptions, inputPath string) error {
-	source, dockerfilePath, contextPath, composePath, err := resolveInputSource(cmd, opts, inputPath)
+	source, containerfilePath, contextPath, composePath, err := resolveInputSource(cmd, opts, inputPath)
 	if err != nil {
 		return err
 	}
@@ -85,19 +86,19 @@ func runGen(ctx context.Context, cmd *cobra.Command, opts genOptions, inputPath 
 	if source == sourceCompose {
 		return runGenCompose(ctx, opts, outputPath, composePath)
 	}
-	return runGenDockerfile(ctx, opts, outputPath, dockerfilePath, contextPath)
+	return runGenContainerfile(ctx, opts, outputPath, containerfilePath, contextPath)
 }
 
-func runGenDockerfile(ctx context.Context, opts genOptions, outputPath string, dockerfilePath string, contextPath string) error {
+func runGenContainerfile(ctx context.Context, opts genOptions, outputPath string, containerfilePath string, contextPath string) error {
 	l := zlogger.From(ctx)
-	l.Info("rendering dist artifacts", "source", "dockerfile", "output", outputPath, "dockerfile", dockerfilePath, "context", contextPath)
+	l.Info("rendering dist artifacts", "source", "containerfile", "output", outputPath, "containerfile", containerfilePath, "context", contextPath)
 
-	dockerfileSpec, err := dockerfile.ParseFile(dockerfilePath)
+	containerSpec, err := dockerfile.ParseFile(containerfilePath)
 	if err != nil {
 		return err
 	}
 
-	appName, err := normalizeAppName(dockerfileSpec.Name)
+	appName, err := normalizeAppName(containerSpec.Name)
 	if err != nil {
 		return err
 	}
@@ -109,10 +110,10 @@ func runGenDockerfile(ctx context.Context, opts genOptions, outputPath string, d
 		Namespace:      namespace,
 		Image:          imageRef,
 		Version:        opts.Version,
-		DockerfilePath: dockerfilePath,
+		DockerfilePath: containerfilePath,
 		ContextPath:    contextPath,
 		Platforms:      defaultPlatforms,
-		Dockerfile:     dockerfileSpec,
+		Dockerfile:     containerSpec,
 	}
 	dist := model.NewDistSpec(outputPath)
 
@@ -127,7 +128,7 @@ func runGenDockerfile(ctx context.Context, opts genOptions, outputPath string, d
 	if !opts.SkipImageBuild {
 		l.Info("building image archive", "image", imageRef, "platforms", strings.Join(defaultPlatforms, ","))
 		if err := build.ImageArchive(ctx, build.Options{
-			Dockerfile:    dockerfilePath,
+			Dockerfile:    containerfilePath,
 			Context:       contextPath,
 			Image:         imageRef,
 			Platforms:     defaultPlatforms,
@@ -208,19 +209,19 @@ func runGenCompose(ctx context.Context, opts genOptions, outputPath string, comp
 	return nil
 }
 
-func resolveBuildPaths(cmd *cobra.Command, opts genOptions, inputPath string) (dockerfilePath string, contextPath string) {
+func resolveBuildPaths(cmd *cobra.Command, opts genOptions, inputPath string) (containerfilePath string, contextPath string) {
 	contextPath = filepath.Clean(opts.Context)
-	dockerfilePath = filepath.Clean(opts.Dockerfile)
+	containerfilePath = filepath.Clean(opts.Containerfile)
 	inputPath = filepath.Clean(inputPath)
 
-	if looksLikeDockerfile(filepath.Base(inputPath)) {
+	if looksLikeBuildFile(filepath.Base(inputPath)) {
 		if !cmd.Flags().Changed("context") {
 			contextPath = filepath.Dir(inputPath)
 		}
-		if !cmd.Flags().Changed("dockerfile") {
-			dockerfilePath = inputPath
+		if !cmd.Flags().Changed("containerfile") {
+			containerfilePath = inputPath
 		}
-		return dockerfilePath, contextPath
+		return containerfilePath, contextPath
 	}
 
 	if inputPath != "" {
@@ -228,20 +229,24 @@ func resolveBuildPaths(cmd *cobra.Command, opts genOptions, inputPath string) (d
 			if !cmd.Flags().Changed("context") {
 				contextPath = filepath.Dir(inputPath)
 			}
-			if !cmd.Flags().Changed("dockerfile") {
-				dockerfilePath = filepath.Clean(inputPath)
+			if !cmd.Flags().Changed("containerfile") {
+				containerfilePath = filepath.Clean(inputPath)
 			}
-			return dockerfilePath, contextPath
+			return containerfilePath, contextPath
 		}
 		if !cmd.Flags().Changed("context") {
 			contextPath = filepath.Clean(inputPath)
 		}
-		if !cmd.Flags().Changed("dockerfile") {
-			dockerfilePath = filepath.Join(filepath.Clean(inputPath), "Dockerfile")
+		if !cmd.Flags().Changed("containerfile") {
+			if detected := detectBuildPath(inputPath); detected != "" {
+				containerfilePath = detected
+			} else {
+				containerfilePath = filepath.Join(filepath.Clean(inputPath), "Containerfile")
+			}
 		}
 	}
 
-	return dockerfilePath, contextPath
+	return containerfilePath, contextPath
 }
 
 func resolveComposePath(cmd *cobra.Command, opts genOptions, inputPath string) string {
@@ -252,7 +257,7 @@ func resolveComposePath(cmd *cobra.Command, opts genOptions, inputPath string) s
 
 	composePath := opts.ComposeFile
 	if !cmd.Flags().Changed("compose-file") || strings.TrimSpace(composePath) == "" {
-		return filepath.Join(basePath, "docker-compose.yml")
+		return filepath.Join(basePath, composeDefaultFilenames[0])
 	}
 	composePath = filepath.Clean(composePath)
 	if filepath.IsAbs(composePath) {
@@ -267,30 +272,30 @@ func resolveInputSource(cmd *cobra.Command, opts genOptions, inputPath string) (
 		inputPath = "."
 	}
 
-	dockerfilePath, contextPath := resolveBuildPaths(cmd, opts, inputPath)
+	containerfilePath, contextPath := resolveBuildPaths(cmd, opts, inputPath)
 
 	if cmd.Flags().Changed("compose-file") {
 		return sourceCompose, "", "", resolveComposePath(cmd, opts, inputPath), nil
 	}
-	if cmd.Flags().Changed("dockerfile") {
-		return sourceDockerfile, dockerfilePath, contextPath, "", nil
+	if cmd.Flags().Changed("containerfile") {
+		return sourceContainerfile, containerfilePath, contextPath, "", nil
 	}
 
 	if info, err := os.Stat(inputPath); err == nil && !info.IsDir() {
 		base := filepath.Base(inputPath)
 		lower := strings.ToLower(base)
-		if looksLikeDockerfile(base) {
-			return sourceDockerfile, inputPath, filepath.Dir(inputPath), "", nil
+		if looksLikeBuildFile(base) {
+			return sourceContainerfile, inputPath, filepath.Dir(inputPath), "", nil
 		}
 		if isComposeFilename(lower) || isYAMLFile(lower) {
 			return sourceCompose, "", "", inputPath, nil
 		}
-		return "", "", "", "", fmt.Errorf("input path %s is a file but is not recognized as Dockerfile or compose YAML; use --dockerfile or --compose-file", inputPath)
+		return "", "", "", "", fmt.Errorf("input path %s is a file but is not recognized as a container build file or compose YAML; use --containerfile or --compose-file", inputPath)
 	} else if err != nil && os.IsNotExist(err) {
 		base := filepath.Base(inputPath)
 		lower := strings.ToLower(base)
-		if looksLikeDockerfile(base) {
-			return sourceDockerfile, inputPath, filepath.Dir(inputPath), "", nil
+		if looksLikeBuildFile(base) {
+			return sourceContainerfile, inputPath, filepath.Dir(inputPath), "", nil
 		}
 		if isComposeFilename(lower) || isYAMLFile(lower) {
 			return sourceCompose, "", "", inputPath, nil
@@ -300,13 +305,20 @@ func resolveInputSource(cmd *cobra.Command, opts genOptions, inputPath string) (
 	}
 
 	composePath := detectComposePath(inputPath)
-	if composePath != "" && fileExists(dockerfilePath) {
-		return "", "", "", "", fmt.Errorf("ambiguous input in %s: found both %s and %s; use --dockerfile or --compose-file", inputPath, dockerfilePath, composePath)
+	buildPaths := detectBuildPaths(inputPath)
+	if len(buildPaths) > 1 {
+		return "", "", "", "", fmt.Errorf("ambiguous input in %s: found both %s and %s; use --containerfile to choose one", inputPath, buildPaths[0], buildPaths[1])
+	}
+	if composePath != "" && len(buildPaths) == 1 {
+		return "", "", "", "", fmt.Errorf("ambiguous input in %s: found both %s and %s; use --containerfile or --compose-file", inputPath, buildPaths[0], composePath)
 	}
 	if composePath != "" {
 		return sourceCompose, "", "", composePath, nil
 	}
-	return sourceDockerfile, dockerfilePath, contextPath, "", nil
+	if len(buildPaths) == 1 {
+		return sourceContainerfile, buildPaths[0], contextPath, "", nil
+	}
+	return sourceContainerfile, containerfilePath, contextPath, "", nil
 }
 
 func detectComposePath(inputPath string) string {
@@ -326,15 +338,38 @@ func inputBasePath(inputPath string) string {
 		return filepath.Dir(basePath)
 	}
 	baseName := filepath.Base(basePath)
-	if looksLikeDockerfile(baseName) || isComposeFilename(strings.ToLower(baseName)) || isYAMLFile(baseName) {
+	if looksLikeBuildFile(baseName) || isComposeFilename(strings.ToLower(baseName)) || isYAMLFile(baseName) {
 		return filepath.Dir(basePath)
 	}
 	return basePath
 }
 
-func looksLikeDockerfile(name string) bool {
+func looksLikeBuildFile(name string) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
-	return lower == "dockerfile" || strings.HasPrefix(lower, "dockerfile.")
+	return lower == "dockerfile" ||
+		strings.HasPrefix(lower, "dockerfile.") ||
+		lower == "containerfile" ||
+		strings.HasPrefix(lower, "containerfile.")
+}
+
+func detectBuildPath(inputPath string) string {
+	paths := detectBuildPaths(inputPath)
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0]
+}
+
+func detectBuildPaths(inputPath string) []string {
+	basePath := inputBasePath(inputPath)
+	out := make([]string, 0, len(buildFileDefaultFilenames))
+	for _, name := range buildFileDefaultFilenames {
+		path := filepath.Join(basePath, name)
+		if fileExists(path) {
+			out = append(out, path)
+		}
+	}
+	return out
 }
 
 func isComposeFilename(lowerName string) bool {
@@ -381,7 +416,7 @@ func normalizeAppName(name string) (string, error) {
 	out = invalidNameRunes.ReplaceAllString(out, "-")
 	out = strings.Trim(out, "-.")
 	if out == "" {
-		return "", fmt.Errorf("Dockerfile LABEL NAME must contain at least one alphanumeric character")
+		return "", fmt.Errorf("LABEL NAME must contain at least one alphanumeric character")
 	}
 	return out, nil
 }

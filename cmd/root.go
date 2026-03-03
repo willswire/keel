@@ -21,7 +21,7 @@ var (
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "keel",
-		Short:         "Generate UDS/Zarf dist artifacts from a Dockerfile",
+		Short:         "Generate UDS/Zarf dist artifacts from Containerfile or Compose",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
