@@ -39,6 +39,27 @@ type AppSpec struct {
 	Dockerfile     DockerfileSpec
 }
 
+type ComposeBuildSpec struct {
+	ContextPath    string
+	DockerfilePath string
+}
+
+type ComposeServiceSpec struct {
+	Name       string
+	Namespace  string
+	Image      string
+	Dockerfile DockerfileSpec
+	Build      *ComposeBuildSpec
+}
+
+type ComposeAppSpec struct {
+	Name            string
+	Namespace       string
+	Version         string
+	ComposeFilePath string
+	Services        []ComposeServiceSpec
+}
+
 type DistSpec struct {
 	RootPath        string
 	ManifestDir     string
@@ -62,4 +83,11 @@ func (a AppSpec) PrimaryPort() (Port, error) {
 		return Port{}, fmt.Errorf("no EXPOSE instruction found in Dockerfile")
 	}
 	return a.Dockerfile.ExposedPorts[0], nil
+}
+
+func (s ComposeServiceSpec) PrimaryPort() (Port, error) {
+	if len(s.Dockerfile.ExposedPorts) == 0 {
+		return Port{}, fmt.Errorf("no EXPOSE or ports entry found for service %q", s.Name)
+	}
+	return s.Dockerfile.ExposedPorts[0], nil
 }
