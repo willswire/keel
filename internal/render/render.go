@@ -40,17 +40,21 @@ func Generate(opts Options) error {
 	}
 
 	if err := writeTemplate(filepath.Join(opts.Dist.ManifestDir, "deployment.yaml"), deploymentTemplate, map[string]any{
-		"Name":         opts.App.Name,
-		"Namespace":    opts.App.Namespace,
-		"Image":        opts.App.Image,
-		"Ports":        ports,
-		"Env":          opts.App.Dockerfile.Env,
-		"Command":      parseDockerArgs(opts.App.Dockerfile.Entrypoint),
-		"Args":         parseDockerArgs(opts.App.Dockerfile.Cmd),
-		"Healthcheck":  parseHealthcheck(opts.App.Dockerfile.Healthcheck),
-		"RunAsNonRoot": runAsNonRoot,
-		"HasRunAsUser": hasRunAsUser,
-		"RunAsUser":    runAsUser,
+		"Name":           opts.App.Name,
+		"Namespace":      opts.App.Namespace,
+		"Image":          opts.App.Image,
+		"Ports":          ports,
+		"Env":            opts.App.Dockerfile.Env,
+		"Command":        parseDockerArgs(opts.App.Dockerfile.Entrypoint),
+		"Args":           parseDockerArgs(opts.App.Dockerfile.Cmd),
+		"Healthcheck":    parseHealthcheck(opts.App.Dockerfile.Healthcheck),
+		"RunAsNonRoot":   runAsNonRoot,
+		"HasRunAsUser":   hasRunAsUser,
+		"RunAsUser":      runAsUser,
+		"InitContainers": []renderedInitContainer{},
+		"VolumeMounts":   []renderedVolumeMount{},
+		"Volumes":        []renderedVolume{},
+		"Resources":      renderedResources{},
 	}); err != nil {
 		return err
 	}
@@ -179,6 +183,36 @@ type renderedPort struct {
 	Protocol string
 }
 
+type renderedInitContainer struct {
+	Name    string
+	Image   string
+	Command []string
+}
+
+type renderedVolumeMount struct {
+	Name      string
+	MountPath string
+	ReadOnly  bool
+	SubPath   string
+}
+
+type renderedVolume struct {
+	Name                  string
+	PersistentVolumeClaim string
+	SecretName            string
+	ConfigMapName         string
+}
+
+type renderedResources struct {
+	HasAny        bool
+	HasLimits     bool
+	LimitCPU      string
+	LimitMemory   string
+	HasRequests   bool
+	RequestCPU    string
+	RequestMemory string
+}
+
 func buildTemplatePorts(ports []model.Port) []renderedPort {
 	out := make([]renderedPort, 0, len(ports))
 	for i, p := range ports {
@@ -284,7 +318,13 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: {{ .RunAsNonRoot }}{{ if .HasRunAsUser }}
-        runAsUser: {{ .RunAsUser }}{{ end }}
+        runAsUser: {{ .RunAsUser }}{{ end }}{{ if .InitContainers }}
+      initContainers:{{ range .InitContainers }}
+        - name: {{ .Name }}
+          image: {{ .Image }}
+          imagePullPolicy: IfNotPresent
+          command:{{ range .Command }}
+            - {{ quote . }}{{ end }}{{ end }}{{ end }}
       containers:
         - name: {{ .Name }}
           image: {{ .Image }}
@@ -295,6 +335,15 @@ spec:
             capabilities:
               drop:
                 - ALL
+{{- if .Resources.HasAny }}
+          resources:{{ if .Resources.HasLimits }}
+            limits:{{ if .Resources.LimitCPU }}
+              cpu: {{ quote .Resources.LimitCPU }}{{ end }}{{ if .Resources.LimitMemory }}
+              memory: {{ quote .Resources.LimitMemory }}{{ end }}{{ end }}{{ if .Resources.HasRequests }}
+            requests:{{ if .Resources.RequestCPU }}
+              cpu: {{ quote .Resources.RequestCPU }}{{ end }}{{ if .Resources.RequestMemory }}
+              memory: {{ quote .Resources.RequestMemory }}{{ end }}{{ end }}
+{{- end }}
 {{- if .Command }}
           command:{{ range .Command }}
             - {{ quote . }}{{ end }}
@@ -303,19 +352,37 @@ spec:
           args:{{ range .Args }}
             - {{ quote . }}{{ end }}
 {{- end }}
+{{- if .Ports }}
           ports:{{ range .Ports }}
             - name: {{ .Name }}
               containerPort: {{ .Number }}
-              protocol: {{ .Protocol }}{{ end }}{{ if .Env }}
+              protocol: {{ .Protocol }}{{ end }}
+{{- end }}{{ if .Env }}
           env:{{ range .Env }}
             - name: {{ .Name }}
-              value: {{ quote .Value }}{{ end }}{{ end }}{{ if .Healthcheck }}
+              value: {{ quote .Value }}{{ end }}{{ end }}{{ if .VolumeMounts }}
+          volumeMounts:{{ range .VolumeMounts }}
+            - name: {{ .Name }}
+              mountPath: {{ quote .MountPath }}{{ if .ReadOnly }}
+              readOnly: true{{ end }}{{ if .SubPath }}
+              subPath: {{ quote .SubPath }}{{ end }}{{ end }}
+{{- end }}{{ if .Healthcheck }}
           livenessProbe:
             exec:
               command:{{ range .Healthcheck }}
                 - {{ quote . }}{{ end }}
             initialDelaySeconds: 5
             periodSeconds: 30
+{{- end }}
+{{- if .Volumes }}
+      volumes:{{ range .Volumes }}
+        - name: {{ .Name }}{{ if .PersistentVolumeClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .PersistentVolumeClaim }}{{ end }}{{ if .SecretName }}
+          secret:
+            secretName: {{ .SecretName }}{{ end }}{{ if .ConfigMapName }}
+          configMap:
+            name: {{ .ConfigMapName }}{{ end }}{{ end }}
 {{- end }}
 `
 

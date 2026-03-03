@@ -15,12 +15,26 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 
 	dir := t.TempDir()
 	dist := model.NewDistSpec(filepath.Join(dir, ".dist"))
+	configPath := filepath.Join(dir, "app-config.yml")
+	secretPath := filepath.Join(dir, "db-password.txt")
+	if err := os.WriteFile(configPath, []byte("key: value\n"), 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+	if err := os.WriteFile(secretPath, []byte("super-secret"), 0o644); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
 
 	app := model.ComposeAppSpec{
 		Name:            "demo-stack",
 		Namespace:       "demo-stack",
 		Version:         "0.2.0",
 		ComposeFilePath: "/workspace/examples/docker-compose.yml",
+		Volumes: map[string]model.ComposeVolumeSpec{
+			"app-data": {Name: "app-data"},
+		},
+		Secrets: map[string]model.ComposeSecretSpec{
+			"db-password": {Name: "db-password", FilePath: secretPath},
+		},
 		Services: []model.ComposeServiceSpec{
 			{
 				Name:      "api",
@@ -36,6 +50,20 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 					User:         "10001",
 					Entrypoint:   `["python","/app/server.py"]`,
 					Cmd:          `["--port","8080"]`,
+				},
+				Volumes: []model.ComposeVolumeMount{
+					{Name: "app-data", Type: "volume", Target: "/var/lib/app"},
+					{Type: "bind", SourcePath: configPath, Target: "/etc/app/config.yml", ReadOnly: true},
+				},
+				Secrets: []model.ComposeServiceSecretSpec{
+					{Source: "db-password", Target: "db-password"},
+				},
+				DependsOn: []model.ComposeDependencySpec{
+					{Service: "redis", Condition: "service_started"},
+				},
+				Resources: model.ComposeResourcesSpec{
+					Limits:   model.ComposeResourceSet{CPU: "1", Memory: "512Mi"},
+					Requests: model.ComposeResourceSet{CPU: "250m", Memory: "128Mi"},
 				},
 			},
 			{
@@ -70,6 +98,9 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 		filepath.Join(dist.ManifestDir, "deployment-api.yaml"),
 		filepath.Join(dist.ManifestDir, "service-api.yaml"),
 		filepath.Join(dist.ManifestDir, "uds-package-api.yaml"),
+		filepath.Join(dist.ManifestDir, "pvc-app-data.yaml"),
+		filepath.Join(dist.ManifestDir, "secret-db-password.yaml"),
+		filepath.Join(dist.ManifestDir, "configmap-api-bind-1.yaml"),
 		filepath.Join(dist.ManifestDir, "deployment-redis.yaml"),
 		filepath.Join(dist.ManifestDir, "service-redis.yaml"),
 		filepath.Join(dist.ManifestDir, "uds-package-redis.yaml"),
@@ -89,5 +120,27 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	}
 	if !strings.Contains(string(zarfConfig), "redis:7-alpine") {
 		t.Fatalf("expected image-only service reference in zarf config")
+	}
+	if !strings.Contains(string(zarfConfig), "busybox:1.36") {
+		t.Fatalf("expected dependency init-container image reference in zarf config")
+	}
+
+	deployment, err := os.ReadFile(filepath.Join(dist.ManifestDir, "deployment-api.yaml"))
+	if err != nil {
+		t.Fatalf("read api deployment: %v", err)
+	}
+	for _, want := range []string{
+		"initContainers:",
+		"wait-redis",
+		"busybox:1.36",
+		"resources:",
+		"cpu: \"1\"",
+		"memory: \"512Mi\"",
+		"mountPath: \"/etc/app/config.yml\"",
+		"secretName: db-password",
+	} {
+		if !strings.Contains(string(deployment), want) {
+			t.Fatalf("expected deployment to contain %q", want)
+		}
 	}
 }

@@ -44,12 +44,58 @@ type ComposeBuildSpec struct {
 	DockerfilePath string
 }
 
+type ComposeVolumeSpec struct {
+	Name     string
+	External bool
+}
+
+type ComposeVolumeMount struct {
+	Name       string
+	Type       string
+	Source     string
+	SourcePath string
+	Target     string
+	ReadOnly   bool
+}
+
+type ComposeSecretSpec struct {
+	Name        string
+	External    bool
+	FilePath    string
+	Environment string
+}
+
+type ComposeServiceSecretSpec struct {
+	Source string
+	Target string
+}
+
+type ComposeDependencySpec struct {
+	Service   string
+	Condition string
+}
+
+type ComposeResourceSet struct {
+	CPU    string
+	Memory string
+}
+
+type ComposeResourcesSpec struct {
+	Limits   ComposeResourceSet
+	Requests ComposeResourceSet
+}
+
 type ComposeServiceSpec struct {
 	Name       string
 	Namespace  string
 	Image      string
 	Dockerfile DockerfileSpec
 	Build      *ComposeBuildSpec
+	Volumes    []ComposeVolumeMount
+	Secrets    []ComposeServiceSecretSpec
+	DependsOn  []ComposeDependencySpec
+	Resources  ComposeResourcesSpec
+	Profiles   []string
 }
 
 type ComposeAppSpec struct {
@@ -58,6 +104,8 @@ type ComposeAppSpec struct {
 	Version         string
 	ComposeFilePath string
 	Services        []ComposeServiceSpec
+	Volumes         map[string]ComposeVolumeSpec
+	Secrets         map[string]ComposeSecretSpec
 }
 
 type DistSpec struct {
