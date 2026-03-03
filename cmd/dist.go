@@ -12,6 +12,7 @@ import (
 	zlogger "github.com/zarf-dev/zarf/src/pkg/logger"
 
 	build "github.com/willswire/keel/internal/buildkit"
+	"github.com/willswire/keel/internal/compose"
 	"github.com/willswire/keel/internal/dockerfile"
 	"github.com/willswire/keel/internal/model"
 	"github.com/willswire/keel/internal/render"
@@ -19,9 +20,18 @@ import (
 )
 
 var defaultPlatforms = []string{"linux/amd64", "linux/arm64"}
+var composeDefaultFilenames = []string{"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
+
+type genSource string
+
+const (
+	sourceDockerfile genSource = "dockerfile"
+	sourceCompose    genSource = "compose"
+)
 
 type genOptions struct {
 	Dockerfile         string
+	ComposeFile        string
 	Context            string
 	Version            string
 	Output             string
@@ -36,7 +46,7 @@ func newGenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "gen [PATH]",
 		Aliases: []string{"dist"},
-		Short:   "Generate a .dist package layout from a Dockerfile",
+		Short:   "Generate a .dist package layout from Dockerfile or Docker Compose",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputPath := "."
@@ -48,6 +58,7 @@ func newGenCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&opts.Dockerfile, "dockerfile", "./Dockerfile", "Path to Dockerfile")
+	cmd.Flags().StringVar(&opts.ComposeFile, "compose-file", "", "Path to docker-compose.yml file")
 	cmd.Flags().StringVar(&opts.Context, "context", ".", "Docker build context")
 	cmd.Flags().StringVar(&opts.Version, "version", model.DefaultVersion, "Package version written to zarf.yaml")
 	cmd.Flags().StringVar(&opts.Output, "output", ".dist", "Output directory")
@@ -59,15 +70,25 @@ func newGenCmd() *cobra.Command {
 }
 
 func runGen(ctx context.Context, cmd *cobra.Command, opts genOptions, inputPath string) error {
-	l := zlogger.From(ctx)
-
-	dockerfilePath, contextPath := resolveBuildPaths(cmd, opts, inputPath)
+	source, dockerfilePath, contextPath, composePath, err := resolveInputSource(cmd, opts, inputPath)
+	if err != nil {
+		return err
+	}
 	outputPath := filepath.Clean(opts.Output)
 
 	if err := prepareOutput(outputPath); err != nil {
 		return err
 	}
-	l.Info("rendering dist artifacts", "output", outputPath, "dockerfile", dockerfilePath, "context", contextPath)
+
+	if source == sourceCompose {
+		return runGenCompose(ctx, opts, outputPath, composePath)
+	}
+	return runGenDockerfile(ctx, opts, outputPath, dockerfilePath, contextPath)
+}
+
+func runGenDockerfile(ctx context.Context, opts genOptions, outputPath string, dockerfilePath string, contextPath string) error {
+	l := zlogger.From(ctx)
+	l.Info("rendering dist artifacts", "source", "dockerfile", "output", outputPath, "dockerfile", dockerfilePath, "context", contextPath)
 
 	dockerfileSpec, err := dockerfile.ParseFile(dockerfilePath)
 	if err != nil {
@@ -129,11 +150,85 @@ func runGen(ctx context.Context, cmd *cobra.Command, opts genOptions, inputPath 
 	return nil
 }
 
+func runGenCompose(ctx context.Context, opts genOptions, outputPath string, composePath string) error {
+	l := zlogger.From(ctx)
+	l.Info("rendering dist artifacts", "source", "compose", "output", outputPath, "compose_file", composePath)
+
+	composeSpec, err := compose.ParseFile(composePath)
+	if err != nil {
+		return err
+	}
+	composeSpec.Version = opts.Version
+
+	dist := model.NewDistSpec(outputPath)
+	if err := render.GenerateCompose(render.ComposeOptions{
+		App:  composeSpec,
+		Dist: dist,
+	}); err != nil {
+		return err
+	}
+
+	archivePaths := []string{}
+	if !opts.SkipImageBuild {
+		for _, svc := range composeSpec.Services {
+			if svc.Build == nil {
+				continue
+			}
+			outputArchive := filepath.Join(dist.RootPath, "images", fmt.Sprintf("%s.tar", svc.Name))
+			l.Info("building image archive", "service", svc.Name, "image", svc.Image, "platforms", strings.Join(defaultPlatforms, ","))
+			if err := build.ImageArchive(ctx, build.Options{
+				Dockerfile:    svc.Build.DockerfilePath,
+				Context:       svc.Build.ContextPath,
+				Image:         svc.Image,
+				Platforms:     defaultPlatforms,
+				OutputArchive: outputArchive,
+				VerboseBuild:  isVerboseEnabled || strings.EqualFold(logLevelCLI, "debug"),
+			}); err != nil {
+				return err
+			}
+			archivePaths = append(archivePaths, outputArchive)
+		}
+	}
+
+	l.Info("validating dist artifacts")
+	if err := validate.ComposeDist(ctx, validate.ComposeOptions{
+		Dist:                     dist,
+		App:                      composeSpec,
+		RequireBuiltImageArchive: !opts.SkipImageBuild,
+		ValidateWithZarf:         !opts.SkipZarfValidation,
+	}); err != nil {
+		return err
+	}
+
+	l.Info("gen complete", "status", "SUCCESS", "output", dist.RootPath, "zarf_config", filepath.Join(dist.RootPath, "zarf.yaml"), "compose_file", composePath, "image_archives_built", len(archivePaths))
+	return nil
+}
+
 func resolveBuildPaths(cmd *cobra.Command, opts genOptions, inputPath string) (dockerfilePath string, contextPath string) {
 	contextPath = filepath.Clean(opts.Context)
 	dockerfilePath = filepath.Clean(opts.Dockerfile)
+	inputPath = filepath.Clean(inputPath)
+
+	if looksLikeDockerfile(filepath.Base(inputPath)) {
+		if !cmd.Flags().Changed("context") {
+			contextPath = filepath.Dir(inputPath)
+		}
+		if !cmd.Flags().Changed("dockerfile") {
+			dockerfilePath = inputPath
+		}
+		return dockerfilePath, contextPath
+	}
 
 	if inputPath != "" {
+		if info, err := os.Stat(inputPath); err == nil && !info.IsDir() {
+			if !cmd.Flags().Changed("context") {
+				contextPath = filepath.Dir(inputPath)
+			}
+			if !cmd.Flags().Changed("dockerfile") {
+				dockerfilePath = filepath.Clean(inputPath)
+			}
+			return dockerfilePath, contextPath
+		}
 		if !cmd.Flags().Changed("context") {
 			contextPath = filepath.Clean(inputPath)
 		}
@@ -143,6 +238,120 @@ func resolveBuildPaths(cmd *cobra.Command, opts genOptions, inputPath string) (d
 	}
 
 	return dockerfilePath, contextPath
+}
+
+func resolveComposePath(cmd *cobra.Command, opts genOptions, inputPath string) string {
+	basePath := inputBasePath(inputPath)
+	if basePath == "" {
+		basePath = "."
+	}
+
+	composePath := opts.ComposeFile
+	if !cmd.Flags().Changed("compose-file") || strings.TrimSpace(composePath) == "" {
+		return filepath.Join(basePath, "docker-compose.yml")
+	}
+	composePath = filepath.Clean(composePath)
+	if filepath.IsAbs(composePath) {
+		return composePath
+	}
+	return filepath.Join(basePath, composePath)
+}
+
+func resolveInputSource(cmd *cobra.Command, opts genOptions, inputPath string) (genSource, string, string, string, error) {
+	inputPath = filepath.Clean(inputPath)
+	if inputPath == "" {
+		inputPath = "."
+	}
+
+	dockerfilePath, contextPath := resolveBuildPaths(cmd, opts, inputPath)
+
+	if cmd.Flags().Changed("compose-file") {
+		return sourceCompose, "", "", resolveComposePath(cmd, opts, inputPath), nil
+	}
+	if cmd.Flags().Changed("dockerfile") {
+		return sourceDockerfile, dockerfilePath, contextPath, "", nil
+	}
+
+	if info, err := os.Stat(inputPath); err == nil && !info.IsDir() {
+		base := filepath.Base(inputPath)
+		lower := strings.ToLower(base)
+		if looksLikeDockerfile(base) {
+			return sourceDockerfile, inputPath, filepath.Dir(inputPath), "", nil
+		}
+		if isComposeFilename(lower) || isYAMLFile(lower) {
+			return sourceCompose, "", "", inputPath, nil
+		}
+		return "", "", "", "", fmt.Errorf("input path %s is a file but is not recognized as Dockerfile or compose YAML; use --dockerfile or --compose-file", inputPath)
+	} else if err != nil && os.IsNotExist(err) {
+		base := filepath.Base(inputPath)
+		lower := strings.ToLower(base)
+		if looksLikeDockerfile(base) {
+			return sourceDockerfile, inputPath, filepath.Dir(inputPath), "", nil
+		}
+		if isComposeFilename(lower) || isYAMLFile(lower) {
+			return sourceCompose, "", "", inputPath, nil
+		}
+	} else if err != nil {
+		return "", "", "", "", fmt.Errorf("stat input path %s: %w", inputPath, err)
+	}
+
+	composePath := detectComposePath(inputPath)
+	if composePath != "" && fileExists(dockerfilePath) {
+		return "", "", "", "", fmt.Errorf("ambiguous input in %s: found both %s and %s; use --dockerfile or --compose-file", inputPath, dockerfilePath, composePath)
+	}
+	if composePath != "" {
+		return sourceCompose, "", "", composePath, nil
+	}
+	return sourceDockerfile, dockerfilePath, contextPath, "", nil
+}
+
+func detectComposePath(inputPath string) string {
+	basePath := inputBasePath(inputPath)
+	for _, name := range composeDefaultFilenames {
+		path := filepath.Join(basePath, name)
+		if fileExists(path) {
+			return path
+		}
+	}
+	return ""
+}
+
+func inputBasePath(inputPath string) string {
+	basePath := filepath.Clean(inputPath)
+	if info, err := os.Stat(basePath); err == nil && !info.IsDir() {
+		return filepath.Dir(basePath)
+	}
+	baseName := filepath.Base(basePath)
+	if looksLikeDockerfile(baseName) || isComposeFilename(strings.ToLower(baseName)) || isYAMLFile(baseName) {
+		return filepath.Dir(basePath)
+	}
+	return basePath
+}
+
+func looksLikeDockerfile(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return lower == "dockerfile" || strings.HasPrefix(lower, "dockerfile.")
+}
+
+func isComposeFilename(lowerName string) bool {
+	for _, name := range composeDefaultFilenames {
+		if lowerName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isYAMLFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return ext == ".yml" || ext == ".yaml"
+}
+
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
 }
 
 func prepareOutput(output string) error {
