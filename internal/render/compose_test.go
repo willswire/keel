@@ -124,6 +124,16 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	if !strings.Contains(string(zarfConfig), "busybox:1.36") {
 		t.Fatalf("expected dependency init-container image reference in zarf config")
 	}
+	for _, want := range []string{
+		"variables:",
+		"name: COMPOSE_SECRET_DB_PASSWORD",
+		"sensitive: true",
+		"prompt: true",
+	} {
+		if !strings.Contains(string(zarfConfig), want) {
+			t.Fatalf("expected zarf config to contain %q", want)
+		}
+	}
 
 	deployment, err := os.ReadFile(filepath.Join(dist.ManifestDir, "deployment-api.yaml"))
 	if err != nil {
@@ -142,5 +152,16 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 		if !strings.Contains(string(deployment), want) {
 			t.Fatalf("expected deployment to contain %q", want)
 		}
+	}
+
+	secretManifest, err := os.ReadFile(filepath.Join(dist.ManifestDir, "secret-db-password.yaml"))
+	if err != nil {
+		t.Fatalf("read secret manifest: %v", err)
+	}
+	if strings.Contains(string(secretManifest), "super-secret") {
+		t.Fatalf("expected secret manifest to avoid raw secret values")
+	}
+	if !strings.Contains(string(secretManifest), "###ZARF_VAR_COMPOSE_SECRET_DB_PASSWORD###") {
+		t.Fatalf("expected secret manifest to contain templated zarf variable value")
 	}
 }
