@@ -97,13 +97,12 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 		filepath.Join(dist.ManifestDir, "namespace.yaml"),
 		filepath.Join(dist.ManifestDir, "deployment-api.yaml"),
 		filepath.Join(dist.ManifestDir, "service-api.yaml"),
-		filepath.Join(dist.ManifestDir, "uds-package-api.yaml"),
 		filepath.Join(dist.ManifestDir, "pvc-app-data.yaml"),
 		filepath.Join(dist.ManifestDir, "secret-db-password.yaml"),
 		filepath.Join(dist.ManifestDir, "configmap-api-bind-1.yaml"),
 		filepath.Join(dist.ManifestDir, "deployment-redis.yaml"),
 		filepath.Join(dist.ManifestDir, "service-redis.yaml"),
-		filepath.Join(dist.ManifestDir, "uds-package-redis.yaml"),
+		filepath.Join(dist.ManifestDir, "uds-package.yaml"),
 		filepath.Join(dist.RootPath, "zarf.yaml"),
 	} {
 		if _, err := os.Stat(file); err != nil {
@@ -123,6 +122,14 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	}
 	if !strings.Contains(string(zarfConfig), "busybox:1.36") {
 		t.Fatalf("expected dependency init-container image reference in zarf config")
+	}
+	redisIndex := strings.Index(string(zarfConfig), "name: redis")
+	apiIndex := strings.Index(string(zarfConfig), "name: api")
+	if redisIndex == -1 || apiIndex == -1 {
+		t.Fatalf("expected zarf config to contain both redis and api component names")
+	}
+	if redisIndex > apiIndex {
+		t.Fatalf("expected zarf components to be ordered by depends_on (redis before api)")
 	}
 	for _, want := range []string{
 		"variables:",
@@ -151,6 +158,28 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 	} {
 		if !strings.Contains(string(deployment), want) {
 			t.Fatalf("expected deployment to contain %q", want)
+		}
+	}
+
+	redisDeployment, err := os.ReadFile(filepath.Join(dist.ManifestDir, "deployment-redis.yaml"))
+	if err != nil {
+		t.Fatalf("read redis deployment: %v", err)
+	}
+	if !strings.Contains(string(redisDeployment), "runAsNonRoot: true") {
+		t.Fatalf("expected redis deployment to default runAsNonRoot: true when compose user is unset")
+	}
+
+	udsPackage, err := os.ReadFile(filepath.Join(dist.ManifestDir, "uds-package.yaml"))
+	if err != nil {
+		t.Fatalf("read uds package manifest: %v", err)
+	}
+	for _, want := range []string{
+		"name: demo-stack",
+		"- service: api",
+		"- service: redis",
+	} {
+		if !strings.Contains(string(udsPackage), want) {
+			t.Fatalf("expected uds package manifest to contain %q", want)
 		}
 	}
 

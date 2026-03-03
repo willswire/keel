@@ -24,19 +24,23 @@ func ComposeDist(ctx context.Context, opts ComposeOptions) error {
 		filepath.Join(opts.Dist.ManifestDir, "namespace.yaml"),
 		filepath.Join(opts.Dist.RootPath, "zarf.yaml"),
 	}
+	hasExposedService := false
 	for _, svc := range opts.App.Services {
 		requiredFiles = append(requiredFiles,
 			filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("deployment-%s.yaml", svc.Name)),
 		)
 		if len(svc.Dockerfile.ExposedPorts) > 0 {
+			hasExposedService = true
 			requiredFiles = append(requiredFiles,
 				filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("service-%s.yaml", svc.Name)),
-				filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("uds-package-%s.yaml", svc.Name)),
 			)
 		}
 		if opts.RequireBuiltImageArchive && svc.Build != nil {
 			requiredFiles = append(requiredFiles, filepath.Join(opts.Dist.RootPath, "images", fmt.Sprintf("%s.tar", svc.Name)))
 		}
+	}
+	if hasExposedService {
+		requiredFiles = append(requiredFiles, filepath.Join(opts.Dist.ManifestDir, "uds-package.yaml"))
 	}
 	for _, f := range requiredFiles {
 		if _, err := os.Stat(f); err != nil {
@@ -82,6 +86,7 @@ func checkComposeZarfConsistency(app model.ComposeAppSpec, pkg v1alpha1.ZarfPack
 		componentByName[component.Name] = component
 	}
 
+	hasExposedService := false
 	for _, svc := range app.Services {
 		component, ok := componentByName[svc.Name]
 		if !ok {
@@ -93,9 +98,9 @@ func checkComposeZarfConsistency(app model.ComposeAppSpec, pkg v1alpha1.ZarfPack
 			fmt.Sprintf("manifests/deployment-%s.yaml", svc.Name),
 		}
 		if len(svc.Dockerfile.ExposedPorts) > 0 {
+			hasExposedService = true
 			requiredManifestFiles = append(requiredManifestFiles,
 				fmt.Sprintf("manifests/service-%s.yaml", svc.Name),
-				fmt.Sprintf("manifests/uds-package-%s.yaml", svc.Name),
 			)
 		}
 		if err := ensureComponentManifests(component, requiredManifestFiles); err != nil {
@@ -132,6 +137,19 @@ func checkComposeZarfConsistency(app model.ComposeAppSpec, pkg v1alpha1.ZarfPack
 		}
 	}
 
+	if hasExposedService {
+		found := false
+		for _, component := range pkg.Components {
+			if componentHasManifest(component, "manifests/uds-package.yaml") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("zarf config must include manifests/uds-package.yaml in at least one component")
+		}
+	}
+
 	return nil
 }
 
@@ -148,4 +166,16 @@ func ensureComponentManifests(component v1alpha1.ZarfComponent, requiredFiles []
 		}
 	}
 	return nil
+}
+
+func componentHasManifest(component v1alpha1.ZarfComponent, requiredFile string) bool {
+	required := filepath.ToSlash(requiredFile)
+	for _, manifest := range component.Manifests {
+		for _, file := range manifest.Files {
+			if filepath.ToSlash(file) == required {
+				return true
+			}
+		}
+	}
+	return false
 }
