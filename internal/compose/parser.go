@@ -285,12 +285,12 @@ type composeDeployResourceValues struct {
 	Memory string `yaml:"memory"`
 }
 
-// ParseFile parses a Docker Compose file into a normalized spec.
+// ParseFile parses a compose file into a normalized spec.
 func ParseFile(path string) (model.ComposeAppSpec, error) {
 	return ParseFileWithOptions(path, ParseOptions{})
 }
 
-// ParseFileWithOptions parses a Docker Compose file using caller-provided options.
+// ParseFileWithOptions parses a compose file using caller-provided options.
 func ParseFileWithOptions(path string, opts ParseOptions) (model.ComposeAppSpec, error) {
 	composeAbs, err := filepath.Abs(path)
 	if err != nil {
@@ -659,10 +659,23 @@ func resolveBuild(raw composeBuild, composeDir string) (*model.ComposeBuildSpec,
 	if !filepath.IsAbs(dockerfilePath) {
 		dockerfilePath = filepath.Join(contextPath, dockerfilePath)
 	}
+	if strings.EqualFold(filepath.Base(dockerfilePath), "Dockerfile") && !fileExists(dockerfilePath) {
+		containerfilePath := filepath.Join(contextPath, "Containerfile")
+		if fileExists(containerfilePath) {
+			dockerfilePath = containerfilePath
+		}
+	}
 	return &model.ComposeBuildSpec{
 		ContextPath:    contextPath,
 		DockerfilePath: dockerfilePath,
 	}, nil
+}
+
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
 }
 
 func parseEnvFiles(node yamlv3.Node, composeDir string) ([]model.EnvVar, error) {

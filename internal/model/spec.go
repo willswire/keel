@@ -128,7 +128,7 @@ func NewDistSpec(output string) DistSpec {
 
 func (a AppSpec) PrimaryPort() (Port, error) {
 	if len(a.Dockerfile.ExposedPorts) == 0 {
-		return Port{}, fmt.Errorf("no EXPOSE instruction found in Dockerfile")
+		return Port{}, fmt.Errorf("no EXPOSE instruction found in container build file")
 	}
 	return a.Dockerfile.ExposedPorts[0], nil
 }

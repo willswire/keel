@@ -4,11 +4,11 @@
 
 If you already know how to build containers, `keel` helps you ship to Kubernetes without writing Kubernetes YAML.
 
-It reads either Dockerfile instructions or a Docker Compose file and generates a deployable `.dist/` package for Zarf/UDS.
+It reads either Containerfile instructions or a Compose file and generates a deployable `.dist/` package for Zarf/UDS.
 
 ## Commands
 
-- `keel gen [PATH]`: Parse Dockerfile (default) or Docker Compose, render manifests + `zarf.yaml`, build OCI image archive(s), and validate output.
+- `keel gen [PATH]`: Parse Containerfile (default) or Compose YAML, render manifests + `zarf.yaml`, build OCI image archive(s), and validate output.
 - `keel version`: Print the CLI version.
 
 ## Quickstart
@@ -17,11 +17,11 @@ It reads either Dockerfile instructions or a Docker Compose file and generates a
 # Build the Keel binary
 go build -o ./build/keel .
 
-# Generate from Dockerfile
-./build/keel gen examples/Dockerfile
+# Generate from Containerfile
+./build/keel gen examples/Containerfile
 
-# Generate from Docker Compose
-./build/keel gen examples/docker-compose.yml
+# Generate from Compose
+./build/keel gen examples/compose.yaml
 
 # Package with Zarf
 zarf package create .dist
@@ -33,7 +33,7 @@ zarf package deploy --confirm zarf-package-hello-world-*-0.1.0.tar.zst
 
 ## How It Works
 
-`keel gen` infers package configuration from the final Dockerfile stage:
+`keel gen` infers package configuration from the final container build stage:
 
 - `LABEL NAME=...` -> package name, app name, namespace, and UDS host
 - `EXPOSE` -> service port + UDS exposed port
@@ -44,7 +44,7 @@ zarf package deploy --confirm zarf-package-hello-world-*-0.1.0.tar.zst
 
 Compose mode (`--compose-file`) maps each compose service into a UDS/Zarf component:
 
-- `services.*.build` -> image archive build input (`context`, `dockerfile`)
+- `services.*.build` -> image archive build input (`context`, optional build-file selector)
 - `services.*.image` -> component image reference (used directly when `build` is not set)
 - `services.*.ports` / `services.*.expose` -> service/deployment ports + UDS exposed port
 - `services.*.env_file` + `services.*.environment` -> merged container env (inline env overrides env_file)
@@ -63,14 +63,16 @@ Keel tolerates compose extensions and dev-only keys without failing generation:
 - top-level/service `x-*` extension blocks (including YAML anchors/aliases/merge keys)
 - `services.*.develop` keys (ignored during manifest generation)
 
-`keel gen` auto-detects source type from the input path (Dockerfile file path or compose YAML file path).
-If a directory contains both a Dockerfile and a compose file, Keel errors as ambiguous and asks you to use `--dockerfile` or `--compose-file`.
+`keel gen` auto-detects source type from the input path (Containerfile path or compose YAML path).
+When scanning a directory, Keel prefers canonical compose filenames (`compose.yaml`, `compose.yml`) before legacy names (`docker-compose.yaml`, `docker-compose.yml`).
+If a directory contains both a build file and a compose file, Keel errors as ambiguous and asks you to use `--containerfile` or `--compose-file`.
+If a directory contains both `Dockerfile` and `Containerfile`, Keel errors as ambiguous and asks you to use `--containerfile`.
 
 ## Notes
 
-- Dockerfile mode builds use `docker buildx build` and output an OCI archive at `.dist/images/app.tar`.
+- Containerfile mode builds use `docker buildx build` and output an OCI archive at `.dist/images/app.tar`.
 - Compose mode builds one OCI archive per service that defines `build`, under `.dist/images/<service>.tar`.
 - If all compose services are profile-gated, use `--compose-profile <name>` (repeatable) to select services.
-- Docker + buildx is required (`docker buildx version`).
+- `docker buildx` is required (`docker buildx version`).
 - `keel gen` always validates generated artifacts and overwrites `./.dist` by default.
 - Build logs are quiet by default; use `--verbose` (or `--log-level debug`) for full build output.
