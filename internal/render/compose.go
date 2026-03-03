@@ -474,7 +474,6 @@ func buildComposeSecretVariableName(secretName string, used map[string]struct{})
 	if base == "" {
 		base = "VALUE"
 	}
-	base = "COMPOSE_SECRET_" + base
 	candidate := base
 	for i := 2; ; i++ {
 		if _, exists := used[candidate]; !exists {
