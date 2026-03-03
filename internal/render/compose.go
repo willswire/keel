@@ -31,6 +31,21 @@ type composeComponentSpec struct {
 	Images        []string
 }
 
+type composeSecretTemplateSpec struct {
+	Name          string
+	VariableName  string
+	TemplateValue string
+	Description   string
+}
+
+type composeZarfVariable struct {
+	Name        string `yaml:"name"`
+	Default     string `yaml:"default,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Prompt      bool   `yaml:"prompt,omitempty"`
+	Sensitive   bool   `yaml:"sensitive,omitempty"`
+}
+
 func GenerateCompose(opts ComposeOptions) error {
 	if err := os.MkdirAll(opts.Dist.ManifestDir, 0o755); err != nil {
 		return fmt.Errorf("create manifest directory: %w", err)
@@ -46,16 +61,32 @@ func GenerateCompose(opts ComposeOptions) error {
 	}
 
 	secretManifestByName := map[string]string{}
+	secretTemplateByName := map[string]composeSecretTemplateSpec{}
+	usedSecretVariables := map[string]struct{}{}
 	for _, name := range sortedSecretNames(opts.App.Secrets) {
 		spec := opts.App.Secrets[name]
 		if spec.External {
 			continue
 		}
+		variableName := buildComposeSecretVariableName(spec.Name, usedSecretVariables)
+		description := fmt.Sprintf("Value for compose secret %s", spec.Name)
+		if spec.Environment != "" {
+			description = fmt.Sprintf("%s (compose source environment: %s)", description, spec.Environment)
+		} else if spec.FilePath != "" {
+			description = fmt.Sprintf("%s (compose source file: %s)", description, filepath.Base(spec.FilePath))
+		}
+		template := composeSecretTemplateSpec{
+			Name:          spec.Name,
+			VariableName:  variableName,
+			TemplateValue: fmt.Sprintf("###ZARF_VAR_%s###", variableName),
+			Description:   description,
+		}
 		relPath := filepath.ToSlash(filepath.Join("manifests", fmt.Sprintf("secret-%s.yaml", spec.Name)))
-		if err := writeComposeSecretManifest(filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("secret-%s.yaml", spec.Name)), opts.App.Namespace, spec); err != nil {
+		if err := writeComposeSecretManifest(filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("secret-%s.yaml", spec.Name)), opts.App.Namespace, template); err != nil {
 			return err
 		}
 		secretManifestByName[name] = relPath
+		secretTemplateByName[name] = template
 	}
 
 	pvcManifestByName := map[string]string{}
@@ -206,7 +237,7 @@ func GenerateCompose(opts ComposeOptions) error {
 		components = append(components, component)
 	}
 
-	return writeComposeZarfConfig(opts, components)
+	return writeComposeZarfConfig(opts, components, composeSecretVariables(secretTemplateByName))
 }
 
 func buildRenderedResources(spec model.ComposeResourcesSpec) renderedResources {
@@ -339,20 +370,7 @@ func writeComposePVCManifest(path string, namespace string, claimName string) er
 	return writeYAMLManifest(path, manifest)
 }
 
-func writeComposeSecretManifest(path string, namespace string, spec model.ComposeSecretSpec) error {
-	value := "REPLACE_ME"
-	if spec.FilePath != "" {
-		content, err := os.ReadFile(spec.FilePath)
-		if err != nil {
-			return fmt.Errorf("read compose secret file %s: %w", spec.FilePath, err)
-		}
-		value = string(content)
-	} else if spec.Environment != "" {
-		if envValue, ok := os.LookupEnv(spec.Environment); ok {
-			value = envValue
-		}
-	}
-
+func writeComposeSecretManifest(path string, namespace string, secret composeSecretTemplateSpec) error {
 	manifest := struct {
 		APIVersion string `yaml:"apiVersion"`
 		Kind       string `yaml:"kind"`
@@ -365,10 +383,10 @@ func writeComposeSecretManifest(path string, namespace string, spec model.Compos
 	}{}
 	manifest.APIVersion = "v1"
 	manifest.Kind = "Secret"
-	manifest.Metadata.Name = spec.Name
+	manifest.Metadata.Name = secret.Name
 	manifest.Metadata.Namespace = namespace
 	manifest.Type = "Opaque"
-	manifest.StringData = map[string]string{"value": value}
+	manifest.StringData = map[string]string{"value": secret.TemplateValue}
 	return writeYAMLManifest(path, manifest)
 }
 
@@ -427,7 +445,48 @@ func sortedSecretNames(secrets map[string]model.ComposeSecretSpec) []string {
 	return keys
 }
 
+func buildComposeSecretVariableName(secretName string, used map[string]struct{}) string {
+	base := strings.ToUpper(strings.TrimSpace(secretName))
+	base = strings.ReplaceAll(base, "-", "_")
+	base = strings.ReplaceAll(base, ".", "_")
+	base = invalidSecretVariableRunes.ReplaceAllString(base, "_")
+	base = strings.Trim(base, "_")
+	if base == "" {
+		base = "VALUE"
+	}
+	base = "COMPOSE_SECRET_" + base
+	candidate := base
+	for i := 2; ; i++ {
+		if _, exists := used[candidate]; !exists {
+			used[candidate] = struct{}{}
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s_%d", base, i)
+	}
+}
+
+func composeSecretVariables(secretTemplateByName map[string]composeSecretTemplateSpec) []composeZarfVariable {
+	keys := make([]string, 0, len(secretTemplateByName))
+	for key := range secretTemplateByName {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	variables := make([]composeZarfVariable, 0, len(keys))
+	for _, key := range keys {
+		secret := secretTemplateByName[key]
+		variables = append(variables, composeZarfVariable{
+			Name:        secret.VariableName,
+			Description: secret.Description,
+			Prompt:      true,
+			Sensitive:   true,
+		})
+	}
+	return variables
+}
+
 var invalidManifestNameRunes = regexp.MustCompile(`[^a-z0-9.-]+`)
+var invalidSecretVariableRunes = regexp.MustCompile(`[^A-Z0-9_]+`)
 
 func sanitizeManifestName(raw string) string {
 	name := strings.ToLower(strings.TrimSpace(raw))
@@ -457,7 +516,7 @@ func dedupeStrings(values []string) []string {
 	return out
 }
 
-func writeComposeZarfConfig(opts ComposeOptions, components []composeComponentSpec) error {
+func writeComposeZarfConfig(opts ComposeOptions, components []composeComponentSpec, variables []composeZarfVariable) error {
 	pkg := struct {
 		APIVersion string `yaml:"apiVersion"`
 		Kind       string `yaml:"kind"`
@@ -466,6 +525,7 @@ func writeComposeZarfConfig(opts ComposeOptions, components []composeComponentSp
 			Version     string `yaml:"version"`
 			Description string `yaml:"description,omitempty"`
 		} `yaml:"metadata"`
+		Variables  []composeZarfVariable `yaml:"variables,omitempty"`
 		Components []struct {
 			Name      string `yaml:"name"`
 			Required  bool   `yaml:"required"`
@@ -487,6 +547,7 @@ func writeComposeZarfConfig(opts ComposeOptions, components []composeComponentSp
 	pkg.Metadata.Name = opts.App.Name
 	pkg.Metadata.Version = opts.App.Version
 	pkg.Metadata.Description = fmt.Sprintf("Generated by keel from %s", opts.App.ComposeFilePath)
+	pkg.Variables = variables
 
 	for _, svc := range components {
 		component := struct {
