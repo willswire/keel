@@ -1,10 +1,10 @@
 # Keel
 
-`keel` turns your containerized app into a UDS package.
+A tool for turning containerized applications into deployable UDS packages, whether the app is a single container or a multi-service stack.
 
-If you already know how to build containers, `keel` helps you ship to Kubernetes without writing Kubernetes YAML.
+`keel` accepts either a `Containerfile` or a [Compose Specification](https://compose-spec.io/) file and translates that input into Kubernetes resources tailored for running on UDS.
 
-It reads either Containerfile instructions or a Compose file and generates a deployable `.dist/` package for Zarf/UDS.
+Like Kompose, Keel is a convenience tool for moving from local container environments to cluster deployment. Transformations from Compose to Kubernetes/UDS are practical and high-signal, but not always a byte-for-byte representation of runtime behavior.
 
 ## Commands
 
@@ -33,7 +33,7 @@ zarf package deploy --confirm zarf-package-hello-world-*-0.1.0.tar.zst
 
 ## How It Works
 
-`keel gen` infers package configuration from the final container build stage:
+For single-container apps, `keel gen` infers package configuration from the final container build stage:
 
 - `LABEL NAME=...` -> package name, app name, namespace, and UDS host
 - `EXPOSE` -> service port + UDS exposed port
