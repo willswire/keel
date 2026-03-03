@@ -29,7 +29,7 @@ func ComposeDist(ctx context.Context, opts ComposeOptions) error {
 		requiredFiles = append(requiredFiles,
 			filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("deployment-%s.yaml", svc.Name)),
 		)
-		if len(svc.Dockerfile.ExposedPorts) > 0 {
+		if len(svc.Container.ExposedPorts) > 0 {
 			hasExposedService = true
 			requiredFiles = append(requiredFiles,
 				filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("service-%s.yaml", svc.Name)),
@@ -97,7 +97,7 @@ func checkComposeZarfConsistency(app model.ComposeAppSpec, pkg v1alpha1.ZarfPack
 			"manifests/namespace.yaml",
 			fmt.Sprintf("manifests/deployment-%s.yaml", svc.Name),
 		}
-		if len(svc.Dockerfile.ExposedPorts) > 0 {
+		if len(svc.Container.ExposedPorts) > 0 {
 			hasExposedService = true
 			requiredManifestFiles = append(requiredManifestFiles,
 				fmt.Sprintf("manifests/service-%s.yaml", svc.Name),
