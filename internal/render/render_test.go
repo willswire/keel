@@ -23,7 +23,7 @@ func TestGenerateAndValidate(t *testing.T) {
 		Platforms: []string{
 			"linux/amd64",
 		},
-		Dockerfile: model.DockerfileSpec{
+		Container: model.ContainerSpec{
 			ExposedPorts: []model.Port{{Number: 3000, Protocol: "TCP"}},
 			Name:         "hello-world",
 			User:         "1000",

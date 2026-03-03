@@ -1,4 +1,4 @@
-package dockerfile
+package containerfile
 
 import (
 	"bufio"
@@ -13,18 +13,18 @@ import (
 )
 
 // ParseFile parses a container build file into a normalized spec for the final build stage.
-func ParseFile(path string) (model.DockerfileSpec, error) {
+func ParseFile(path string) (model.ContainerSpec, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return model.DockerfileSpec{}, fmt.Errorf("read container build file %s: %w", path, err)
+		return model.ContainerSpec{}, fmt.Errorf("read container build file %s: %w", path, err)
 	}
 
 	lines := flattenLines(string(content))
 	if len(lines) == 0 {
-		return model.DockerfileSpec{}, fmt.Errorf("container build file %s is empty", filepath.Clean(path))
+		return model.ContainerSpec{}, fmt.Errorf("container build file %s is empty", filepath.Clean(path))
 	}
 
-	stage := model.DockerfileSpec{}
+	stage := model.ContainerSpec{}
 	haveFrom := false
 
 	for _, line := range lines {
@@ -36,7 +36,7 @@ func ParseFile(path string) (model.DockerfileSpec, error) {
 		switch instruction {
 		case "FROM":
 			haveFrom = true
-			stage = model.DockerfileSpec{}
+			stage = model.ContainerSpec{}
 		case "EXPOSE":
 			if !haveFrom {
 				continue
@@ -80,20 +80,20 @@ func ParseFile(path string) (model.DockerfileSpec, error) {
 	}
 
 	if !haveFrom {
-		return model.DockerfileSpec{}, fmt.Errorf("container build file must contain FROM")
+		return model.ContainerSpec{}, fmt.Errorf("container build file must contain FROM")
 	}
 
 	stage.ExposedPorts = dedupeAndSortPorts(stage.ExposedPorts)
 	stage.Env = dedupeEnv(stage.Env)
 
 	if len(stage.ExposedPorts) == 0 {
-		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required EXPOSE instruction in final stage")
+		return model.ContainerSpec{}, fmt.Errorf("container build file is missing required EXPOSE instruction in final stage")
 	}
 	if strings.TrimSpace(stage.Name) == "" {
-		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required LABEL NAME instruction in final stage")
+		return model.ContainerSpec{}, fmt.Errorf("container build file is missing required LABEL NAME instruction in final stage")
 	}
 	if strings.TrimSpace(stage.User) == "" {
-		return model.DockerfileSpec{}, fmt.Errorf("container build file is missing required USER instruction in final stage")
+		return model.ContainerSpec{}, fmt.Errorf("container build file is missing required USER instruction in final stage")
 	}
 
 	return stage, nil

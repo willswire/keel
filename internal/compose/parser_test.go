@@ -13,13 +13,15 @@ func TestParseFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "docker-compose.yml")
+	path := filepath.Join(dir, "compose.yaml")
+	if err := os.WriteFile(filepath.Join(dir, "Containerfile"), []byte("FROM busybox\n"), 0o644); err != nil {
+		t.Fatalf("write Containerfile: %v", err)
+	}
 	content := `name: demo_stack
 services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -63,13 +65,13 @@ services:
 	if web.Build == nil {
 		t.Fatalf("expected build spec for web service")
 	}
-	if web.Build.DockerfilePath != filepath.Join(dir, "Dockerfile") {
-		t.Fatalf("unexpected dockerfile path: %q", web.Build.DockerfilePath)
+	if web.Build.ContainerfilePath != filepath.Join(dir, "Containerfile") {
+		t.Fatalf("unexpected containerfile path: %q", web.Build.ContainerfilePath)
 	}
-	if got, want := web.Dockerfile.Healthcheck, `CMD ["python","/app/server.py","--healthcheck"]`; got != want {
+	if got, want := web.Container.Healthcheck, `CMD ["python","/app/server.py","--healthcheck"]`; got != want {
 		t.Fatalf("unexpected healthcheck: got %q want %q", got, want)
 	}
-	if got, want := len(web.Dockerfile.ExposedPorts), 1; got != want {
+	if got, want := len(web.Container.ExposedPorts), 1; got != want {
 		t.Fatalf("expected %d exposed port for web, got %d", want, got)
 	}
 
@@ -83,11 +85,11 @@ services:
 	if redis.Build != nil {
 		t.Fatalf("did not expect build spec for redis")
 	}
-	if got, want := len(redis.Dockerfile.ExposedPorts), 1; got != want {
+	if got, want := len(redis.Container.ExposedPorts), 1; got != want {
 		t.Fatalf("expected %d exposed port for redis, got %d", want, got)
 	}
-	if redis.Dockerfile.ExposedPorts[0].Number != 6379 {
-		t.Fatalf("unexpected redis port: %d", redis.Dockerfile.ExposedPorts[0].Number)
+	if redis.Container.ExposedPorts[0].Number != 6379 {
+		t.Fatalf("unexpected redis port: %d", redis.Container.ExposedPorts[0].Number)
 	}
 }
 
@@ -95,7 +97,7 @@ func TestParseFileMissingImageAndBuild(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "docker-compose.yml")
+	path := filepath.Join(dir, "compose.yaml")
 	content := `services:
   app:
     ports: ["8080:8080"]
@@ -109,7 +111,7 @@ func TestParseFileMissingImageAndBuild(t *testing.T) {
 	}
 }
 
-func TestParseFileBuildDefaultsToContainerfileWhenDockerfileMissing(t *testing.T) {
+func TestParseFileBuildDefaultsToContainerfileWhenDefaultBuildFileMissing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -141,7 +143,7 @@ func TestParseFileBuildDefaultsToContainerfileWhenDockerfileMissing(t *testing.T
 	if app.Build == nil {
 		t.Fatalf("expected build spec for app service")
 	}
-	if got, want := app.Build.DockerfilePath, filepath.Join(dir, "Containerfile"); got != want {
+	if got, want := app.Build.ContainerfilePath, filepath.Join(dir, "Containerfile"); got != want {
 		t.Fatalf("unexpected build file path: got=%q want=%q", got, want)
 	}
 }
@@ -149,7 +151,7 @@ func TestParseFileBuildDefaultsToContainerfileWhenDockerfileMissing(t *testing.T
 func TestParseExampleComposeFile(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "..", "examples", "docker-compose.yml")
+	path := filepath.Join("..", "..", "examples", "compose.yaml")
 	spec, err := ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile() example error = %v", err)
@@ -166,7 +168,7 @@ func TestParseFileProfiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "docker-compose.yml")
+	path := filepath.Join(dir, "compose.yaml")
 	content := `services:
   api:
     image: nginx:1.27
@@ -232,7 +234,7 @@ func TestParseFileEnvFileAndEnvironmentOverride(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	path := filepath.Join(dir, "docker-compose.yml")
+	path := filepath.Join(dir, "compose.yaml")
 	content := `services:
   app:
     image: nginx:1.27
@@ -257,13 +259,13 @@ func TestParseFileEnvFileAndEnvironmentOverride(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected app service")
 	}
-	if got, want := envValue(app.Dockerfile.Env, "FOO"), "from-file"; got != want {
+	if got, want := envValue(app.Container.Env, "FOO"), "from-file"; got != want {
 		t.Fatalf("unexpected FOO value: got=%q want=%q", got, want)
 	}
-	if got, want := envValue(app.Dockerfile.Env, "BAR"), "from-inline"; got != want {
+	if got, want := envValue(app.Container.Env, "BAR"), "from-inline"; got != want {
 		t.Fatalf("unexpected BAR value: got=%q want=%q", got, want)
 	}
-	if got, want := envValue(app.Dockerfile.Env, "BAZ"), "42"; got != want {
+	if got, want := envValue(app.Container.Env, "BAZ"), "42"; got != want {
 		t.Fatalf("unexpected BAZ value: got=%q want=%q", got, want)
 	}
 }
@@ -293,7 +295,7 @@ services:
 		t.Fatalf("write base compose: %v", err)
 	}
 
-	path := filepath.Join(dir, "docker-compose.yml")
+	path := filepath.Join(dir, "compose.yaml")
 	content := `include:
   - base.compose.yml
 

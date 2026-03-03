@@ -13,7 +13,7 @@ import (
 )
 
 type Options struct {
-	Dockerfile    string
+	Containerfile string
 	Context       string
 	Image         string
 	Platforms     []string
@@ -24,8 +24,8 @@ type Options struct {
 const ociExporterUnsupportedMsg = "OCI exporter is not supported for the docker driver"
 
 func ImageArchive(ctx context.Context, opts Options) error {
-	if strings.TrimSpace(opts.Dockerfile) == "" {
-		return fmt.Errorf("dockerfile path is required")
+	if strings.TrimSpace(opts.Containerfile) == "" {
+		return fmt.Errorf("containerfile path is required")
 	}
 	if strings.TrimSpace(opts.Context) == "" {
 		return fmt.Errorf("build context path is required")
@@ -48,9 +48,9 @@ func ImageArchive(ctx context.Context, opts Options) error {
 		return fmt.Errorf("remove existing image archive %s: %w", outputArchiveAbs, err)
 	}
 
-	dockerfileAbs, err := filepath.Abs(opts.Dockerfile)
+	containerfileAbs, err := filepath.Abs(opts.Containerfile)
 	if err != nil {
-		return fmt.Errorf("resolve dockerfile path: %w", err)
+		return fmt.Errorf("resolve containerfile path: %w", err)
 	}
 	contextAbs, err := filepath.Abs(opts.Context)
 	if err != nil {
@@ -76,7 +76,7 @@ func ImageArchive(ctx context.Context, opts Options) error {
 		defer cleanup()
 	}
 
-	args := buildxArgs(builder, opts.Platforms, dockerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
+	args := buildxArgs(builder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
 	output, err := runDockerBuildx(ctx, dockerBin, args, opts.VerboseBuild)
 	if err == nil {
 		return nil
@@ -93,7 +93,7 @@ func ImageArchive(ctx context.Context, opts Options) error {
 	}
 	defer cleanup()
 
-	fallbackArgs := buildxArgs(fallbackBuilder, opts.Platforms, dockerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
+	fallbackArgs := buildxArgs(fallbackBuilder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
 	fallbackOutput, err := runDockerBuildx(ctx, dockerBin, fallbackArgs, opts.VerboseBuild)
 	if err != nil {
 		return fmt.Errorf("docker buildx build failed using fallback builder %s: %w%s", fallbackBuilder, err, formatCommandOutputHint(fallbackOutput))
@@ -194,7 +194,7 @@ func cleanupContainerBuilder(dockerBin, builder string) {
 	_ = rmCmd.Run()
 }
 
-func buildxArgs(builder string, platforms []string, dockerfileAbs, image, outputArchiveAbs, contextAbs string) []string {
+func buildxArgs(builder string, platforms []string, containerfileAbs, image, outputArchiveAbs, contextAbs string) []string {
 	outputSpec := fmt.Sprintf("type=oci,name=%s,dest=%s", image, outputArchiveAbs)
 	args := []string{
 		"buildx", "build",
@@ -204,7 +204,7 @@ func buildxArgs(builder string, platforms []string, dockerfileAbs, image, output
 	}
 	args = append(args,
 		"--platform", strings.Join(platforms, ","),
-		"--file", dockerfileAbs,
+		"--file", containerfileAbs,
 		"--tag", image,
 		"--output", outputSpec,
 		contextAbs,
