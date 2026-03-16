@@ -25,7 +25,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      MESSAGE: hello
+      APP_MESSAGE: hello
       APP_PORT: "8080"
     user: "10001"
     command: ["--port", "8080"]
@@ -156,7 +156,7 @@ func TestParseExampleComposeFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFile() example error = %v", err)
 	}
-	if spec.Name != "hello-stack" {
+	if spec.Name != "hello-world" {
 		t.Fatalf("unexpected compose project name: %q", spec.Name)
 	}
 	if got, want := len(spec.Services), 2; got != want {
