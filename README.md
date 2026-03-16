@@ -29,6 +29,8 @@ zarf package create .dist
 # (Optionally) Deploy k3d core slim dev and the package
 uds deploy k3d-core-slim-dev:latest
 zarf package deploy --confirm zarf-package-hello-world-*-0.1.0.tar.zst
+
+# Visit the app in your browser at https://hello-world.uds.dev
 ```
 
 ## How It Works

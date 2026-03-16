@@ -1,14 +1,14 @@
-name: hello-stack
+name: hello-world
 
 services:
-  hello:
+  hello-world:
     build:
       context: .
     image: keel.local/hello:latest
     env_file:
       - .env
     environment:
-      MESSAGE: "Hello from compose!"
+      APP_MESSAGE: "Hello from compose!"
     ports:
       - "8080:8080"
     volumes:

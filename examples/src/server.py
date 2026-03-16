@@ -5,8 +5,8 @@ import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 APP_NAME = os.getenv("APP_NAME", "hello-world")
-APP_TAGLINE = os.getenv("APP_TAGLINE", "A slightly more glamorous hello")
-DEFAULT_PORT = int(os.getenv("APP_PORT", "8080"))
+APP_MESSAGE = os.getenv("APP_MESSAGE", "A slightly more glamorous hello")
+APP_PORT = int(os.getenv("APP_PORT", "8080"))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -60,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
   </head>
   <body>
     <main class=\"card\">
-      <h1>{MESSAGE}</h1>
+      <h1>{APP_MESSAGE}</h1>
     </main>
   </body>
 </html>
@@ -79,7 +79,7 @@ def run_healthcheck():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--port", type=int, default=APP_PORT)
     parser.add_argument("--healthcheck", action="store_true")
     args = parser.parse_args()
 
