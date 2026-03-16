@@ -17,11 +17,11 @@ Like Kompose, Keel is a convenience tool for moving from local container environ
 # Build the Keel binary
 go build -o ./build/keel .
 
-# Generate from Containerfile
-./build/keel gen examples/Containerfile
-
 # Generate from Compose
 ./build/keel gen examples/compose.yaml
+
+# (Alternatively) Generate from Containerfiles
+# ./build/keel gen examples/Containerfile
 
 # Package with Zarf
 zarf package create .dist
