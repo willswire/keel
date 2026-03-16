@@ -46,7 +46,7 @@ func TestGenerateComposeAndValidate(t *testing.T) {
 				},
 				Container: model.ContainerSpec{
 					ExposedPorts: []model.Port{{Number: 8080, Protocol: "TCP"}},
-					Env:          []model.EnvVar{{Name: "MESSAGE", Value: "hello"}},
+					Env:          []model.EnvVar{{Name: "APP_MESSAGE", Value: "hello"}},
 					User:         "10001",
 					Entrypoint:   `["python","/app/server.py"]`,
 					Cmd:          `["--port","8080"]`,
