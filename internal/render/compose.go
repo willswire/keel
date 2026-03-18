@@ -206,8 +206,8 @@ func GenerateCompose(opts ComposeOptions) error {
 		}
 		component.DependsOn = dedupeStrings(component.DependsOn)
 
+		serviceRel := filepath.ToSlash(filepath.Join("manifests", fmt.Sprintf("service-%s.yaml", svc.Name)))
 		if len(ports) > 0 {
-			serviceRel := filepath.ToSlash(filepath.Join("manifests", fmt.Sprintf("service-%s.yaml", svc.Name)))
 			if err := writeTemplate(filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("service-%s.yaml", svc.Name)), serviceTemplate, map[string]any{
 				"Name":      svc.Name,
 				"Namespace": svc.Namespace,
@@ -226,6 +226,16 @@ func GenerateCompose(opts ComposeOptions) error {
 				Host:    svc.Name,
 				Port:    primary.Number,
 			})
+		} else {
+			// No ports declared: generate a headless service so DNS resolution works
+			// for inter-service communication (e.g. depends_on, proxy upstreams).
+			if err := writeTemplate(filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("service-%s.yaml", svc.Name)), headlessServiceTemplate, map[string]any{
+				"Name":      svc.Name,
+				"Namespace": svc.Namespace,
+			}); err != nil {
+				return err
+			}
+			serviceManifestFiles = append(serviceManifestFiles, serviceRel)
 		}
 
 		component.ManifestFiles = dedupeStrings(serviceManifestFiles)
