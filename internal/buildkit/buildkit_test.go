@@ -13,6 +13,7 @@ func TestBuildxArgs(t *testing.T) {
 		"ghcr.io/willswire/hello-world-example:dev",
 		"/tmp/.dist/images/app.tar",
 		"/tmp/example",
+		"",
 	)
 
 	want := []string{
@@ -43,6 +44,7 @@ func TestBuildxArgsOutputSpecContainsImageName(t *testing.T) {
 		"ghcr.io/willswire/app:dev",
 		"/workspace/.dist/images/app.tar",
 		"/workspace/example",
+		"",
 	)
 
 	var outputSpec string
@@ -74,6 +76,7 @@ func TestBuildxArgsIncludesBuilderWhenProvided(t *testing.T) {
 		"ghcr.io/willswire/app:dev",
 		"/workspace/.dist/images/app.tar",
 		"/workspace/example",
+		"",
 	)
 	if len(args) < 4 {
 		t.Fatalf("unexpected args: %q", args)

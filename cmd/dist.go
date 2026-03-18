@@ -187,6 +187,7 @@ func runGenCompose(ctx context.Context, opts genOptions, outputPath string, comp
 				Image:         svc.Image,
 				Platforms:     defaultPlatforms,
 				OutputArchive: outputArchive,
+				Target:        svc.Build.Target,
 				VerboseBuild:  isVerboseEnabled || strings.EqualFold(logLevelCLI, "debug"),
 			}); err != nil {
 				return err
