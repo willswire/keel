@@ -39,6 +39,7 @@ type composeSecretTemplateSpec struct {
 	VariableName  string
 	TemplateValue string
 	Description   string
+	FilePath      string
 }
 
 type composeExposeSpec struct {
@@ -81,6 +82,7 @@ func GenerateCompose(opts ComposeOptions) error {
 			VariableName:  variableName,
 			TemplateValue: fmt.Sprintf("###ZARF_VAR_%s###", variableName),
 			Description:   description,
+			FilePath:      spec.FilePath,
 		}
 		relPath := filepath.ToSlash(filepath.Join("manifests", fmt.Sprintf("secret-%s.yaml", spec.Name)))
 		if err := writeComposeSecretManifest(filepath.Join(opts.Dist.ManifestDir, fmt.Sprintf("secret-%s.yaml", spec.Name)), opts.App.Namespace, template); err != nil {
@@ -519,14 +521,20 @@ func composeSecretVariables(secretTemplateByName map[string]composeSecretTemplat
 	variables := make([]v1alpha1.InteractiveVariable, 0, len(keys))
 	for _, key := range keys {
 		secret := secretTemplateByName[key]
-		variables = append(variables, v1alpha1.InteractiveVariable{
+		v := v1alpha1.InteractiveVariable{
 			Variable: v1alpha1.Variable{
 				Name:      secret.VariableName,
 				Sensitive: true,
 			},
 			Description: secret.Description,
 			Prompt:      true,
-		})
+		}
+		if secret.FilePath != "" {
+			if data, err := os.ReadFile(secret.FilePath); err == nil {
+				v.Default = strings.TrimSpace(string(data))
+			}
+		}
+		variables = append(variables, v)
 	}
 	return variables
 }
