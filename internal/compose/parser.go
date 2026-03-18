@@ -228,6 +228,7 @@ func resolveBuild(raw *types.BuildConfig, composeDir string) (*model.ComposeBuil
 	return &model.ComposeBuildSpec{
 		ContextPath:       contextAbs,
 		ContainerfilePath: buildFilePath,
+		Target:            strings.TrimSpace(raw.Target),
 	}, nil
 }
 

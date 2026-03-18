@@ -42,6 +42,7 @@ type AppSpec struct {
 type ComposeBuildSpec struct {
 	ContextPath       string
 	ContainerfilePath string
+	Target            string
 }
 
 type ComposeVolumeSpec struct {

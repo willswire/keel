@@ -18,6 +18,7 @@ type Options struct {
 	Image         string
 	Platforms     []string
 	OutputArchive string
+	Target        string
 	VerboseBuild  bool
 }
 
@@ -76,7 +77,7 @@ func ImageArchive(ctx context.Context, opts Options) error {
 		defer cleanup()
 	}
 
-	args := buildxArgs(builder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
+	args := buildxArgs(builder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs, opts.Target)
 	output, err := runDockerBuildx(ctx, dockerBin, args, opts.VerboseBuild)
 	if err == nil {
 		return nil
@@ -93,7 +94,7 @@ func ImageArchive(ctx context.Context, opts Options) error {
 	}
 	defer cleanup()
 
-	fallbackArgs := buildxArgs(fallbackBuilder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs)
+	fallbackArgs := buildxArgs(fallbackBuilder, opts.Platforms, containerfileAbs, opts.Image, outputArchiveAbs, contextAbs, opts.Target)
 	fallbackOutput, err := runDockerBuildx(ctx, dockerBin, fallbackArgs, opts.VerboseBuild)
 	if err != nil {
 		return fmt.Errorf("docker buildx build failed using fallback builder %s: %w%s", fallbackBuilder, err, formatCommandOutputHint(fallbackOutput))
@@ -194,13 +195,16 @@ func cleanupContainerBuilder(dockerBin, builder string) {
 	_ = rmCmd.Run()
 }
 
-func buildxArgs(builder string, platforms []string, containerfileAbs, image, outputArchiveAbs, contextAbs string) []string {
+func buildxArgs(builder string, platforms []string, containerfileAbs, image, outputArchiveAbs, contextAbs, target string) []string {
 	outputSpec := fmt.Sprintf("type=oci,name=%s,dest=%s", image, outputArchiveAbs)
 	args := []string{
 		"buildx", "build",
 	}
 	if strings.TrimSpace(builder) != "" {
 		args = append(args, "--builder", builder)
+	}
+	if strings.TrimSpace(target) != "" {
+		args = append(args, "--target", target)
 	}
 	args = append(args,
 		"--platform", strings.Join(platforms, ","),
