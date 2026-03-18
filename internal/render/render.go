@@ -375,6 +375,19 @@ spec:
       targetPort: {{ .Number }}{{ end }}
 `
 
+const headlessServiceTemplate = `apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Name }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: {{ .Name }}
+`
+
 const namespaceTemplate = `apiVersion: v1
 kind: Namespace
 metadata:
