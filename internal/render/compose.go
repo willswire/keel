@@ -586,6 +586,27 @@ func writeComposeZarfConfig(opts ComposeOptions, components []composeComponentSp
 	if err != nil {
 		return err
 	}
+	// Deduplicate shared namespaced manifests (secrets, PVCs) across
+	// components so each is only included in the first component that
+	// references it. This prevents Helm ownership conflicts when multiple
+	// components use the same secret. Namespace manifests are excluded
+	// from dedup since they must appear in every component.
+	claimedManifests := map[string]struct{}{}
+	for i := range ordered {
+		var unique []string
+		for _, f := range ordered[i].ManifestFiles {
+			base := filepath.Base(f)
+			isShared := strings.HasPrefix(base, "secret-") || strings.HasPrefix(base, "pvc-")
+			if isShared {
+				if _, ok := claimedManifests[f]; ok {
+					continue
+				}
+				claimedManifests[f] = struct{}{}
+			}
+			unique = append(unique, f)
+		}
+		ordered[i].ManifestFiles = unique
+	}
 	for _, svc := range ordered {
 		component := v1alpha1.ZarfComponent{
 			Name:     svc.Name,
