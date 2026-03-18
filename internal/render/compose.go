@@ -263,8 +263,9 @@ func GenerateCompose(opts ComposeOptions) error {
 			return err
 		}
 		if len(components) > 0 {
-			components[0].ManifestFiles = append(components[0].ManifestFiles, udsPackageRel)
-			components[0].ManifestFiles = dedupeStrings(components[0].ManifestFiles)
+			last := len(components) - 1
+			components[last].ManifestFiles = append(components[last].ManifestFiles, udsPackageRel)
+			components[last].ManifestFiles = dedupeStrings(components[last].ManifestFiles)
 		}
 	}
 	return writeComposeZarfConfig(opts, components, composeSecretVariables(secretTemplateByName))
