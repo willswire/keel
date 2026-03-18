@@ -310,9 +310,13 @@ func materializeBindMount(dist model.DistSpec, namespace string, serviceName str
 		return renderedVolume{}, renderedVolumeMount{}, "", fmt.Errorf("service %q bind mount at %q has empty source path", serviceName, mount.Target)
 	}
 
+	// Kubernetes ConfigMap data is limited to 1MiB. Files or directories exceeding
+	// this limit fall through to PVC creation below.
+	const configMapSizeLimit = 900 * 1024 // 900 KiB — leave headroom for YAML overhead
+
 	info, err := os.Stat(sourcePath)
 	if err == nil {
-		if info.Mode().IsRegular() {
+		if info.Mode().IsRegular() && info.Size() <= configMapSizeLimit {
 			data, err := os.ReadFile(sourcePath)
 			if err != nil {
 				return renderedVolume{}, renderedVolumeMount{}, "", fmt.Errorf("read bind file %s: %w", sourcePath, err)
@@ -335,9 +339,19 @@ func materializeBindMount(dist model.DistSpec, namespace string, serviceName str
 				return renderedVolume{}, renderedVolumeMount{}, "", fmt.Errorf("read bind directory %s: %w", sourcePath, err)
 			}
 			data := map[string]string{}
+			totalSize := 0
 			for _, entry := range entries {
 				if entry.IsDir() {
 					continue
+				}
+				fi, err := entry.Info()
+				if err != nil {
+					continue
+				}
+				totalSize += int(fi.Size())
+				if totalSize > configMapSizeLimit {
+					data = nil
+					break
 				}
 				bytes, err := os.ReadFile(filepath.Join(sourcePath, entry.Name()))
 				if err != nil {
