@@ -18,7 +18,7 @@ Like Kompose, Keel is a convenience tool for moving from local container environ
 go build -o ./build/keel .
 
 # Generate from Compose
-./build/keel gen examples/compose.yaml
+./build/keel gen examples/full/compose.yaml
 
 # (Alternatively) Generate from Containerfiles
 # ./build/keel gen examples/Containerfile
