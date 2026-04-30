@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **This project has been archived in lieu of https://github.com/defenseunicorns-labs/compose-bridge-uds**
+
 # Keel
 
 A tool for turning containerized applications into deployable UDS packages, whether the app is a single container or a multi-service stack.
